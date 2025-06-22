@@ -13,6 +13,20 @@ class PanDermInferenceManager: ObservableObject {
     @Published var currentOperation: String = ""
     @Published var errorMessage: String?
     
+    // Model version
+    var modelVersion: String {
+        switch localModelStatus {
+        case .loaded, .updated:
+            return "PanDerm-v1.0.0"
+        case .loading, .updating:
+            return "Loading..."
+        case .error:
+            return "Error"
+        case .notLoaded:
+            return "Not Available"
+        }
+    }
+    
     // Services
     private let localService = LocalInferenceService()
     private let cloudService = PanDermService()

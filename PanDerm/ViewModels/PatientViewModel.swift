@@ -100,17 +100,17 @@ class PatientViewModel: ObservableObject {
         do {
             let analysisResult = try await inferenceManager.analyzePatientRisk(patient)
             
-            // Update patient with analysis results
-            var updatedPatient = patient
+            // Note: Since riskScore and riskLevel are computed properties,
+            // we can't directly update them. In a real implementation,
+            // you would store the analysis results in the patient's medical record
+            // or create a separate risk analysis record.
             
-            // Update risk factors with AI analysis results
-            updatedPatient.riskFactors.riskScore = analysisResult.riskScore
-            updatedPatient.riskFactors.riskLevel = analysisResult.riskLevel
-            
-            // Add analysis metadata
-            // Note: In a full implementation, you'd store the analysis result in the patient's medical record
-            
-            updatePatient(updatedPatient)
+            // For now, we'll just log the analysis results
+            print("Risk analysis completed for \(patient.fullName)")
+            print("AI Risk Score: \(analysisResult.riskScore)")
+            print("AI Risk Level: \(analysisResult.riskLevel)")
+            print("Risk Factors: \(analysisResult.riskFactors)")
+            print("Recommendations: \(analysisResult.recommendations)")
             
         } catch {
             errorMessage = "Failed to analyze patient risk: \(error.localizedDescription)"
@@ -150,33 +150,27 @@ class PatientViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        var updatedPatients: [Patient] = []
-        
         for patient in patients {
             do {
                 let analysisResult = try await inferenceManager.analyzePatientRisk(patient)
                 
-                var updatedPatient = patient
-                updatedPatient.riskFactors.riskScore = analysisResult.riskScore
-                updatedPatient.riskFactors.riskLevel = analysisResult.riskLevel
-                
-                updatedPatients.append(updatedPatient)
+                // Log analysis results for each patient
+                print("Risk analysis completed for \(patient.fullName)")
+                print("AI Risk Score: \(analysisResult.riskScore)")
+                print("AI Risk Level: \(analysisResult.riskLevel)")
                 
             } catch {
                 errorMessage = "Failed to analyze risk for \(patient.fullName): \(error.localizedDescription)"
-                updatedPatients.append(patient) // Keep original patient data
             }
         }
         
-        patients = updatedPatients
-        savePatients()
         isLoading = false
     }
     
     // MARK: - Inference Status and Monitoring
     
     var inferenceStatus: String {
-        if inferenceManager.isLoading {
+        if !inferenceManager.currentOperation.isEmpty {
             return "\(inferenceManager.currentOperation) (\(Int(inferenceManager.inferenceProgress * 100))%)"
         } else {
             return "Ready"

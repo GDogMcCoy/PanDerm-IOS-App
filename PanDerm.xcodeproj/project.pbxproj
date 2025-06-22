@@ -21,6 +21,10 @@
 		A1234567890123456789019F /* PanDermService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A0 /* PanDermService.swift */; };
 		A123456789012345678901A1 /* PatientListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A2 /* PatientListView.swift */; };
 		A123456789012345678901A3 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A4 /* PatientDetailView.swift */; };
+		A123456789012345678901A5 /* LocalInferenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A6 /* LocalInferenceService.swift */; };
+		A123456789012345678901A7 /* PanDermInferenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A8 /* PanDermInferenceManager.swift */; };
+		A123456789012345678901A9 /* InferenceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901AA /* InferenceSettingsView.swift */; };
+		A123456789012345678901AB /* ImageAnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901AC /* ImageAnalysisView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +44,10 @@
 		A123456789012345678901A0 /* PanDermService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanDermService.swift; sourceTree = "<group>"; };
 		A123456789012345678901A2 /* PatientListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListView.swift; sourceTree = "<group>"; };
 		A123456789012345678901A4 /* PatientDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailView.swift; sourceTree = "<group>"; };
+		A123456789012345678901A6 /* LocalInferenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalInferenceService.swift; sourceTree = "<group>"; };
+		A123456789012345678901A8 /* PanDermInferenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanDermInferenceManager.swift; sourceTree = "<group>"; };
+		A123456789012345678901AA /* InferenceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSettingsView.swift; sourceTree = "<group>"; };
+		A123456789012345678901AC /* ImageAnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAnalysisView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,6 +95,8 @@
 			children = (
 				A123456789012345678901A2 /* PatientListView.swift */,
 				A123456789012345678901A4 /* PatientDetailView.swift */,
+				A123456789012345678901AA /* InferenceSettingsView.swift */,
+				A123456789012345678901AC /* ImageAnalysisView.swift */,
 				A1234567890123456789015A /* README.md */,
 			);
 			path = Views;
@@ -106,6 +116,8 @@
 		A1234567890123456789014D /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A123456789012345678901A6 /* LocalInferenceService.swift */,
+				A123456789012345678901A8 /* PanDermInferenceManager.swift */,
 				A1234567890123456789015C /* README.md */,
 			);
 			path = Services;
@@ -221,6 +233,10 @@
 				A1234567890123456789019F /* PanDermService.swift in Sources */,
 				A123456789012345678901A1 /* PatientListView.swift in Sources */,
 				A123456789012345678901A3 /* PatientDetailView.swift in Sources */,
+				A123456789012345678901A5 /* LocalInferenceService.swift in Sources */,
+				A123456789012345678901A7 /* PanDermInferenceManager.swift in Sources */,
+				A123456789012345678901A9 /* InferenceSettingsView.swift in Sources */,
+				A123456789012345678901AB /* ImageAnalysisView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

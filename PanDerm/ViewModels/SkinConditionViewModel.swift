@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /// ViewModel for managing skin condition analysis and PanDerm AI integration
-/// Handles image capture, analysis, and results management
+/// Handles image capture, analysis, and results management with local inference support
 @MainActor
 class SkinConditionViewModel: ObservableObject {
     @Published var skinConditions: [SkinCondition] = []
@@ -13,6 +13,9 @@ class SkinConditionViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var analysisProgress: Double = 0.0
+    
+    // Inference manager for local/cloud analysis
+    @StateObject private var inferenceManager = PanDermInferenceManager()
     
     // MARK: - Image Management
     
@@ -83,9 +86,9 @@ class SkinConditionViewModel: ObservableObject {
         analysisResults = condition.analysisResults
     }
     
-    // MARK: - PanDerm AI Analysis
+    // MARK: - PanDerm AI Analysis with Local Inference
     
-    func analyzeImages(with panDermService: PanDermService) async {
+    func analyzeImages() async {
         guard !capturedImages.isEmpty else {
             errorMessage = "No images to analyze"
             return
@@ -96,21 +99,16 @@ class SkinConditionViewModel: ObservableObject {
         analysisProgress = 0.0
         
         do {
-            // Analyze each image
-            for (index, image) in capturedImages.enumerated() {
-                let progress = Double(index) / Double(capturedImages.count)
-                analysisProgress = progress
-                
-                let result = try await panDermService.analyzeImage(image)
-                analysisResults.append(result)
-                
-                // Update the image with analysis results
-                if let imageIndex = capturedImages.firstIndex(where: { $0.id == image.id }) {
-                    capturedImages[imageIndex].analysisResults.append(result)
+            // Use inference manager for intelligent routing
+            let results = try await inferenceManager.analyzeMultipleImages(capturedImages)
+            analysisResults = results
+            
+            // Update the images with analysis results
+            for (index, result) in results.enumerated() {
+                if index < capturedImages.count {
+                    capturedImages[index].analysisResults.append(result)
                 }
             }
-            
-            analysisProgress = 1.0
             
             // Update selected condition if exists
             if let condition = selectedCondition {
@@ -127,19 +125,36 @@ class SkinConditionViewModel: ObservableObject {
         isLoading = false
     }
     
-    func analyzeSpecificImage(_ image: SkinImage, with panDermService: PanDermService) async -> AnalysisResult? {
+    func analyzeSpecificImage(_ image: SkinImage) async -> AnalysisResult? {
         isLoading = true
         errorMessage = nil
         
         do {
-            let result = try await panDermService.analyzeImage(image)
+            let result = try await inferenceManager.analyzeImage(image)
             analysisResults.append(result)
-            isLoading = false
             return result
         } catch {
             errorMessage = "Image analysis failed: \(error.localizedDescription)"
-            isLoading = false
             return nil
+        } finally {
+            isLoading = false
+        }
+    }
+    
+    // MARK: - Change Detection with Local Inference
+    
+    func detectChanges(baselineImages: [SkinImage], currentImages: [SkinImage]) async -> ChangeDetectionResult? {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let result = try await inferenceManager.detectChanges(baselineImages: baselineImages, currentImages: currentImages)
+            return result
+        } catch {
+            errorMessage = "Change detection failed: \(error.localizedDescription)"
+            return nil
+        } finally {
+            isLoading = false
         }
     }
     
@@ -188,6 +203,28 @@ class SkinConditionViewModel: ObservableObject {
             recommendations: getRecommendations(),
             analysisDate: Date()
         )
+    }
+    
+    // MARK: - Inference Status
+    
+    var inferenceStatus: String {
+        if inferenceManager.isLoading {
+            return "\(inferenceManager.currentOperation) (\(Int(inferenceManager.inferenceProgress * 100))%)"
+        } else {
+            return "Ready"
+        }
+    }
+    
+    var inferenceMode: String {
+        return inferenceManager.inferenceMode.rawValue
+    }
+    
+    var isLocalModelAvailable: Bool {
+        return inferenceManager.localModelStatus == .loaded
+    }
+    
+    var isOnline: Bool {
+        return inferenceManager.isOnline
     }
     
     // MARK: - Symptom Management
@@ -274,6 +311,16 @@ class SkinConditionViewModel: ObservableObject {
     
     func getLatestAnalysis(for condition: SkinCondition) -> AnalysisResult? {
         return condition.analysisResults.max(by: { $0.analysisDate < $1.analysisDate })
+    }
+    
+    // MARK: - Performance Monitoring
+    
+    func getPerformanceStats() -> PerformanceStats {
+        return inferenceManager.getPerformanceStats()
+    }
+    
+    func clearPerformanceData() {
+        inferenceManager.clearPerformanceData()
     }
 }
 

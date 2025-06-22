@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// ViewModel for managing patient data and PanDerm analysis
-/// Handles patient CRUD operations, risk assessment, and AI integration
+/// Handles patient CRUD operations, risk assessment, and AI integration with local inference
 @MainActor
 class PatientViewModel: ObservableObject {
     @Published var patients: [Patient] = []
@@ -10,6 +10,9 @@ class PatientViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var searchText = ""
+    
+    // Inference manager for local/cloud analysis
+    @StateObject private var inferenceManager = PanDermInferenceManager()
     
     // MARK: - Computed Properties
     
@@ -86,20 +89,29 @@ class PatientViewModel: ObservableObject {
         return recommendations
     }
     
-    // MARK: - PanDerm Integration
+    // MARK: - PanDerm Integration with Local Inference
     
-    func analyzePatientRisk(with panDermService: PanDermService) async {
+    func analyzePatientRisk() async {
         guard let patient = selectedPatient else { return }
         
         isLoading = true
         errorMessage = nil
         
         do {
-            _ = try await panDermService.analyzePatientRisk(patient)
+            let analysisResult = try await inferenceManager.analyzePatientRisk(patient)
+            
             // Update patient with analysis results
-            let updatedPatient = patient
-            // Add analysis results to patient record
+            var updatedPatient = patient
+            
+            // Update risk factors with AI analysis results
+            updatedPatient.riskFactors.riskScore = analysisResult.riskScore
+            updatedPatient.riskFactors.riskLevel = analysisResult.riskLevel
+            
+            // Add analysis metadata
+            // Note: In a full implementation, you'd store the analysis result in the patient's medical record
+            
             updatePatient(updatedPatient)
+            
         } catch {
             errorMessage = "Failed to analyze patient risk: \(error.localizedDescription)"
         }
@@ -128,6 +140,95 @@ class PatientViewModel: ObservableObject {
             riskAssessment: riskAssessment,
             recommendations: recommendations
         )
+    }
+    
+    // MARK: - Batch Risk Analysis
+    
+    func analyzeAllPatientsRisk() async {
+        guard !patients.isEmpty else { return }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        var updatedPatients: [Patient] = []
+        
+        for patient in patients {
+            do {
+                let analysisResult = try await inferenceManager.analyzePatientRisk(patient)
+                
+                var updatedPatient = patient
+                updatedPatient.riskFactors.riskScore = analysisResult.riskScore
+                updatedPatient.riskFactors.riskLevel = analysisResult.riskLevel
+                
+                updatedPatients.append(updatedPatient)
+                
+            } catch {
+                errorMessage = "Failed to analyze risk for \(patient.fullName): \(error.localizedDescription)"
+                updatedPatients.append(patient) // Keep original patient data
+            }
+        }
+        
+        patients = updatedPatients
+        savePatients()
+        isLoading = false
+    }
+    
+    // MARK: - Inference Status and Monitoring
+    
+    var inferenceStatus: String {
+        if inferenceManager.isLoading {
+            return "\(inferenceManager.currentOperation) (\(Int(inferenceManager.inferenceProgress * 100))%)"
+        } else {
+            return "Ready"
+        }
+    }
+    
+    var inferenceMode: String {
+        return inferenceManager.inferenceMode.rawValue
+    }
+    
+    var isLocalModelAvailable: Bool {
+        return inferenceManager.localModelStatus == .loaded
+    }
+    
+    var isOnline: Bool {
+        return inferenceManager.isOnline
+    }
+    
+    var currentOperation: String {
+        return inferenceManager.currentOperation
+    }
+    
+    var inferenceProgress: Double {
+        return inferenceManager.inferenceProgress
+    }
+    
+    // MARK: - Performance Monitoring
+    
+    func getPerformanceStats() -> PerformanceStats {
+        return inferenceManager.getPerformanceStats()
+    }
+    
+    func clearPerformanceData() {
+        inferenceManager.clearPerformanceData()
+    }
+    
+    // MARK: - Model Management
+    
+    func downloadModel() async {
+        do {
+            try await inferenceManager.downloadModel()
+        } catch {
+            errorMessage = "Failed to download model: \(error.localizedDescription)"
+        }
+    }
+    
+    func updateModel() async {
+        do {
+            try await inferenceManager.updateLocalModel()
+        } catch {
+            errorMessage = "Failed to update model: \(error.localizedDescription)"
+        }
     }
     
     private func getRiskFactors(for patient: Patient) -> [String] {

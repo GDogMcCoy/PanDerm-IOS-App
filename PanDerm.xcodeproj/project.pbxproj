@@ -19,6 +19,8 @@
 		A1234567890123456789019B /* PatientViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789019C /* PatientViewModel.swift */; };
 		A1234567890123456789019D /* SkinConditionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1234567890123456789019E /* SkinConditionViewModel.swift */; };
 		A1234567890123456789019F /* PanDermService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A0 /* PanDermService.swift */; };
+		A123456789012345678901A1 /* PatientListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A2 /* PatientListView.swift */; };
+		A123456789012345678901A3 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A123456789012345678901A4 /* PatientDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,8 @@
 		A1234567890123456789019C /* PatientViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientViewModel.swift; sourceTree = "<group>"; };
 		A1234567890123456789019E /* SkinConditionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkinConditionViewModel.swift; sourceTree = "<group>"; };
 		A123456789012345678901A0 /* PanDermService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanDermService.swift; sourceTree = "<group>"; };
+		A123456789012345678901A2 /* PatientListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListView.swift; sourceTree = "<group>"; };
+		A123456789012345678901A4 /* PatientDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +85,8 @@
 		A1234567890123456789014B /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				A123456789012345678901A2 /* PatientListView.swift */,
+				A123456789012345678901A4 /* PatientDetailView.swift */,
 				A1234567890123456789015A /* README.md */,
 			);
 			path = Views;
@@ -213,6 +219,8 @@
 				A1234567890123456789019B /* PatientViewModel.swift in Sources */,
 				A1234567890123456789019D /* SkinConditionViewModel.swift in Sources */,
 				A1234567890123456789019F /* PanDermService.swift in Sources */,
+				A123456789012345678901A1 /* PatientListView.swift in Sources */,
+				A123456789012345678901A3 /* PatientDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

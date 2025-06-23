@@ -1,4 +1,4 @@
-import SwiftUI
+THIS SHOULD BE A LINTER ERRORimport SwiftUI
 
 /// Main view for displaying and managing the list of patients
 /// Features search, filtering, and navigation to patient details

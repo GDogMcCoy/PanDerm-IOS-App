@@ -7,12 +7,12 @@ struct Patient: Identifiable, Codable {
     var firstName: String
     var lastName: String
     var dateOfBirth: Date
-    var gender: Gender
-    var ethnicity: Ethnicity?
-    var skinType: FitzpatrickSkinType?
-    var contactInfo: ContactInfo
-    var medicalHistory: MedicalHistory
-    var riskFactors: RiskFactors
+    var medicalRecordNumber: String
+    var emergencyContact: String?
+    var allergies: String?
+    var currentMedications: String?
+    var notes: String?
+    var medicalRecords: [MedicalRecord]
     var createdAt: Date
     var updatedAt: Date
     
@@ -21,12 +21,12 @@ struct Patient: Identifiable, Codable {
         firstName: String,
         lastName: String,
         dateOfBirth: Date,
-        gender: Gender,
-        ethnicity: Ethnicity? = nil,
-        skinType: FitzpatrickSkinType? = nil,
-        contactInfo: ContactInfo,
-        medicalHistory: MedicalHistory = MedicalHistory(),
-        riskFactors: RiskFactors = RiskFactors(),
+        medicalRecordNumber: String,
+        emergencyContact: String? = nil,
+        allergies: String? = nil,
+        currentMedications: String? = nil,
+        notes: String? = nil,
+        medicalRecords: [MedicalRecord] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -34,12 +34,12 @@ struct Patient: Identifiable, Codable {
         self.firstName = firstName
         self.lastName = lastName
         self.dateOfBirth = dateOfBirth
-        self.gender = gender
-        self.ethnicity = ethnicity
-        self.skinType = skinType
-        self.contactInfo = contactInfo
-        self.medicalHistory = medicalHistory
-        self.riskFactors = riskFactors
+        self.medicalRecordNumber = medicalRecordNumber
+        self.emergencyContact = emergencyContact
+        self.allergies = allergies
+        self.currentMedications = currentMedications
+        self.notes = notes
+        self.medicalRecords = medicalRecords
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -48,8 +48,18 @@ struct Patient: Identifiable, Codable {
         "\(firstName) \(lastName)"
     }
     
+    var initials: String {
+        let firstInitial = firstName.prefix(1).uppercased()
+        let lastInitial = lastName.prefix(1).uppercased()
+        return "\(firstInitial)\(lastInitial)"
+    }
+    
     var age: Int {
         Calendar.current.dateComponents([.year], from: dateOfBirth, to: Date()).year ?? 0
+    }
+    
+    var analysisCount: Int {
+        medicalRecords.flatMap { $0.analysisResults }.count
     }
     
     #if DEBUG
@@ -58,17 +68,30 @@ struct Patient: Identifiable, Codable {
             firstName: "John",
             lastName: "Appleseed",
             dateOfBirth: Calendar.current.date(byAdding: .year, value: -45, to: Date())!,
-            gender: .male,
-            contactInfo: ContactInfo(email: "john.appleseed@example.com", phone: "555-123-4567"),
-            riskFactors: RiskFactors(fairSkin: true, manyMoles: true, severeSunburns: true, familyHistory: true)
+            medicalRecordNumber: "MRN001",
+            emergencyContact: "Jane Appleseed (Wife) - 555-123-4567",
+            allergies: "Penicillin",
+            currentMedications: "Lisinopril 10mg daily",
+            notes: "History of atypical moles",
+            medicalRecords: [
+                MedicalRecord(
+                    date: Date(),
+                    chiefComplaint: "Routine skin check",
+                    notes: "Annual dermatology examination",
+                    analysisResults: []
+                )
+            ]
         ),
         Patient(
             firstName: "Jane",
             lastName: "Doe",
             dateOfBirth: Calendar.current.date(byAdding: .year, value: -32, to: Date())!,
-            gender: .female,
-            contactInfo: ContactInfo(email: "jane.doe@example.com", phone: "555-987-6543"),
-            riskFactors: RiskFactors(fairSkin: true, lightHair: true, freckles: true)
+            medicalRecordNumber: "MRN002",
+            emergencyContact: "John Doe (Husband) - 555-987-6543",
+            allergies: "None known",
+            currentMedications: "Birth control",
+            notes: "Fair skin, family history of melanoma",
+            medicalRecords: []
         )
     ]
     #endif
@@ -146,163 +169,180 @@ enum FitzpatrickSkinType: Int, CaseIterable, Codable {
     }
 }
 
-struct ContactInfo: Codable {
-    var email: String?
-    var phone: String?
-    var address: Address?
-    var emergencyContact: EmergencyContact?
+// MARK: - Medical Records
+
+struct MedicalRecord: Identifiable, Codable {
+    let id: UUID
+    var date: Date
+    var chiefComplaint: String
+    var presentIllness: String?
+    var physicalExam: String?
+    var assessment: String?
+    var plan: String?
+    var notes: String?
+    var analysisResults: [AnalysisSession]
+    var attachments: [MedicalAttachment]
     
-    struct Address: Codable {
-        var street: String
-        var city: String
-        var state: String
-        var zipCode: String
-        var country: String
-    }
-    
-    struct EmergencyContact: Codable {
-        var name: String
-        var relationship: String
-        var phone: String
-        var email: String?
+    init(
+        id: UUID = UUID(),
+        date: Date,
+        chiefComplaint: String,
+        presentIllness: String? = nil,
+        physicalExam: String? = nil,
+        assessment: String? = nil,
+        plan: String? = nil,
+        notes: String? = nil,
+        analysisResults: [AnalysisSession] = [],
+        attachments: [MedicalAttachment] = []
+    ) {
+        self.id = id
+        self.date = date
+        self.chiefComplaint = chiefComplaint
+        self.presentIllness = presentIllness
+        self.physicalExam = physicalExam
+        self.assessment = assessment
+        self.plan = plan
+        self.notes = notes
+        self.analysisResults = analysisResults
+        self.attachments = attachments
     }
 }
 
-struct MedicalHistory: Codable {
-    var previousSkinConditions: [SkinCondition] = []
-    var previousSurgeries: [Surgery] = []
-    var medications: [Medication] = []
-    var allergies: [Allergy] = []
-    var familyHistory: FamilyHistory = FamilyHistory()
-    var lifestyleFactors: LifestyleFactors = LifestyleFactors()
+struct MedicalAttachment: Identifiable, Codable {
+    let id: UUID
+    var name: String
+    var type: AttachmentType
+    var fileData: Data
+    var uploadDate: Date
+    var notes: String?
     
-    struct Surgery: Codable, Identifiable {
-        var id: UUID
-        var procedure: String
-        var date: Date
-        var surgeon: String?
-        var notes: String?
+    enum AttachmentType: String, CaseIterable, Codable {
+        case image = "image"
+        case document = "document"
+        case report = "report"
+        case labResult = "lab_result"
+        case other = "other"
         
-        init(id: UUID = UUID(), procedure: String, date: Date, surgeon: String? = nil, notes: String? = nil) {
-            self.id = id
-            self.procedure = procedure
-            self.date = date
-            self.surgeon = surgeon
-            self.notes = notes
+        var displayName: String {
+            switch self {
+            case .image: return "Image"
+            case .document: return "Document"
+            case .report: return "Report"
+            case .labResult: return "Lab Result"
+            case .other: return "Other"
+            }
         }
     }
     
-    struct Medication: Codable, Identifiable {
-        var id: UUID
-        var name: String
-        var dosage: String
-        var frequency: String
-        var startDate: Date
-        var endDate: Date?
-        var isActive: Bool
-        var notes: String?
-        
-        init(id: UUID = UUID(), name: String, dosage: String, frequency: String, startDate: Date, endDate: Date? = nil, isActive: Bool, notes: String? = nil) {
-            self.id = id
-            self.name = name
-            self.dosage = dosage
-            self.frequency = frequency
-            self.startDate = startDate
-            self.endDate = endDate
-            self.isActive = isActive
-            self.notes = notes
-        }
-    }
-    
-    struct Allergy: Codable, Identifiable {
-        var id: UUID
-        var allergen: String
-        var severity: AllergySeverity
-        var reaction: String
-        var notes: String?
-        
-        init(id: UUID = UUID(), allergen: String, severity: AllergySeverity, reaction: String, notes: String? = nil) {
-            self.id = id
-            self.allergen = allergen
-            self.severity = severity
-            self.reaction = reaction
-            self.notes = notes
-        }
-    }
-    
-    enum AllergySeverity: String, CaseIterable, Codable {
-        case mild = "mild"
-        case moderate = "moderate"
-        case severe = "severe"
-        case lifeThreatening = "life_threatening"
+    init(
+        id: UUID = UUID(),
+        name: String,
+        type: AttachmentType,
+        fileData: Data,
+        uploadDate: Date = Date(),
+        notes: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.fileData = fileData
+        self.uploadDate = uploadDate
+        self.notes = notes
     }
 }
 
-struct FamilyHistory: Codable {
-    var melanoma: Bool = false
-    var otherSkinCancers: Bool = false
-    var autoimmuneConditions: Bool = false
-    var details: String = ""
+// MARK: - Treatment Plans
+
+struct TreatmentPlan: Identifiable, Codable {
+    let id: UUID
+    var diagnosis: String
+    var recommendations: [TreatmentRecommendation]
+    var followUpDate: Date?
+    var urgency: TreatmentUrgency
+    var notes: String?
+    var createdDate: Date
+    
+    enum TreatmentUrgency: String, CaseIterable, Codable {
+        case routine = "routine"
+        case urgent = "urgent"
+        case emergency = "emergency"
+        
+        var displayName: String {
+            switch self {
+            case .routine: return "Routine"
+            case .urgent: return "Urgent"
+            case .emergency: return "Emergency"
+            }
+        }
+        
+        var color: String {
+            switch self {
+            case .routine: return "green"
+            case .urgent: return "orange"
+            case .emergency: return "red"
+            }
+        }
+    }
+    
+    init(
+        id: UUID = UUID(),
+        diagnosis: String,
+        recommendations: [TreatmentRecommendation] = [],
+        followUpDate: Date? = nil,
+        urgency: TreatmentUrgency = .routine,
+        notes: String? = nil,
+        createdDate: Date = Date()
+    ) {
+        self.id = id
+        self.diagnosis = diagnosis
+        self.recommendations = recommendations
+        self.followUpDate = followUpDate
+        self.urgency = urgency
+        self.notes = notes
+        self.createdDate = createdDate
+    }
 }
 
-struct LifestyleFactors: Codable {
-    var sunExposure: SunExposure = .moderate
-    var tanningBedUse: Bool = false
-    var smoking: Bool = false
-    var alcoholConsumption: AlcoholConsumption = .none
-    var occupation: String = ""
-    var outdoorActivities: [String] = []
+struct TreatmentRecommendation: Identifiable, Codable {
+    let id: UUID
+    var title: String
+    var description: String
+    var priority: RecommendationPriority
+    var completed: Bool
+    var completedDate: Date?
+    var notes: String?
     
-    enum SunExposure: String, CaseIterable, Codable {
-        case minimal = "minimal"
-        case moderate = "moderate"
+    enum RecommendationPriority: String, CaseIterable, Codable {
+        case low = "low"
+        case medium = "medium"
         case high = "high"
-        case veryHigh = "very_high"
-    }
-    
-    enum AlcoholConsumption: String, CaseIterable, Codable {
-        case none = "none"
-        case occasional = "occasional"
-        case moderate = "moderate"
-        case heavy = "heavy"
-    }
-}
-
-struct RiskFactors: Codable {
-    var fairSkin: Bool = false
-    var lightHair: Bool = false
-    var lightEyes: Bool = false
-    var freckles: Bool = false
-    var manyMoles: Bool = false
-    var atypicalMoles: Bool = false
-    var severeSunburns: Bool = false
-    var familyHistory: Bool = false
-    var personalHistory: Bool = false
-    var immunosuppression: Bool = false
-    var xerodermaPigmentosum: Bool = false
-    
-    var riskScore: Int {
-        var score = 0
-        if fairSkin { score += 1 }
-        if lightHair { score += 1 }
-        if lightEyes { score += 1 }
-        if freckles { score += 1 }
-        if manyMoles { score += 2 }
-        if atypicalMoles { score += 2 }
-        if severeSunburns { score += 1 }
-        if familyHistory { score += 2 }
-        if personalHistory { score += 3 }
-        if immunosuppression { score += 2 }
-        if xerodermaPigmentosum { score += 5 }
-        return score
-    }
-    
-    var riskLevel: String {
-        switch riskScore {
-        case 0...2: return "Low"
-        case 3...5: return "Medium"
-        case 6...8: return "High"
-        default: return "Very High"
+        case critical = "critical"
+        
+        var displayName: String {
+            switch self {
+            case .low: return "Low Priority"
+            case .medium: return "Medium Priority"
+            case .high: return "High Priority"
+            case .critical: return "Critical"
+            }
         }
+    }
+    
+    init(
+        id: UUID = UUID(),
+        title: String,
+        description: String,
+        priority: RecommendationPriority = .medium,
+        completed: Bool = false,
+        completedDate: Date? = nil,
+        notes: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.priority = priority
+        self.completed = completed
+        self.completedDate = completedDate
+        self.notes = notes
     }
 } 

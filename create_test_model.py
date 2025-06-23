@@ -1,222 +1,296 @@
 #!/usr/bin/env python3
 """
-Create Test PanDerm Core ML Model
-This script creates a simple test model for immediate implementation testing.
-In production, this would be replaced with the actual trained PanDerm model.
+Create Test Model for PanDerm Local Inference
+This script creates test Core ML models for immediate implementation and testing.
 """
 
-import coremltools as ct
-import numpy as np
 import os
+import sys
+import numpy as np
+from pathlib import Path
 
-def create_test_panderm_model():
-    """Create a simple test model for immediate implementation"""
+try:
+    import coremltools as ct
+    from coremltools.models import neural_network
+    from coremltools import TensorType
+    print("✅ CoreML Tools imported successfully")
+except ImportError:
+    print("❌ CoreML Tools not found. Installing...")
+    os.system("pip install coremltools")
+    import coremltools as ct
+    from coremltools.models import neural_network
+    from coremltools import TensorType
+
+def create_panderm_classification_model():
+    """Create a PanDerm classification model for skin condition analysis"""
+    print("Creating PanDerm Classification Model...")
     
-    print("Creating test PanDerm Core ML model...")
+    # Model parameters
+    input_size = (1, 3, 224, 224)  # Batch, Channels, Height, Width
+    num_classes = 9  # Match the skin condition classes in LocalInferenceService
     
-    # Define input shape
-    input_shape = (1, 3, 512, 512)  # Batch, Channels, Height, Width
+    # Create a simple but realistic model structure
+    input_features = [
+        ('input', TensorType(shape=input_size, dtype=np.float32))
+    ]
     
-    # Create a simple neural network class
-    class SimplePanDermModel:
-        def __init__(self):
-            self.model_name = "PanDerm-Test-v1.0"
-            print(f"Initializing {self.model_name}")
-        
-        def predict(self, input_data):
-            """Simulate model predictions"""
-            batch_size = input_data.shape[0]
+    output_features = [
+        ('linear_48', TensorType(shape=(1, num_classes), dtype=np.float32))
+    ]
+    
+    # Create a mock model using a simple linear classifier
+    class MockPanDermModel:
+        def predict(self, inputs):
+            # Simulate realistic predictions for skin conditions
+            batch_size = inputs['input'].shape[0]
             
-            # Classification output (15 classes)
-            # Simulate probabilities for different skin conditions
-            classification = np.random.rand(batch_size, 15)
-            # Normalize to sum to 1
-            classification = classification / np.sum(classification, axis=1, keepdims=True)
+            # Generate more realistic probability distributions
+            # Favor some classes over others to simulate real model behavior
+            logits = np.random.randn(batch_size, num_classes)
             
-            # Segmentation output (binary mask)
-            segmentation = np.random.rand(batch_size, 1, 512, 512)
+            # Bias towards common skin conditions
+            class_weights = np.array([0.8, 1.2, 0.6, 1.5, 1.0, 0.7, 0.9, 0.5, 0.4])
+            logits = logits * class_weights
             
-            # Detection output (bounding boxes: x, y, width, height, confidence)
-            detection = np.random.rand(batch_size, 10, 5)
-            # Set confidence values (index 4) to reasonable range
-            detection[:, :, 4] = np.random.rand(batch_size, 10) * 0.8 + 0.1
+            # Apply softmax to get probabilities
+            exp_logits = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+            probabilities = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
             
-            return {
-                'classification': classification,
-                'segmentation': segmentation,
-                'detection': detection
-            }
+            return {'linear_48': probabilities}
     
-    # Create model instance
-    model = SimplePanDermModel()
-    
-    # Create sample input for conversion
-    sample_input = np.random.rand(*input_shape).astype(np.float32)
+    mock_model = MockPanDermModel()
     
     # Convert to Core ML
-    print("Converting to Core ML format...")
     coreml_model = ct.convert(
-        model,
-        inputs=[ct.TensorType(name="input", shape=input_shape)],
-        outputs=[
-            ct.TensorType(name="classification"),
-            ct.TensorType(name="segmentation"),
-            ct.TensorType(name="detection")
-        ],
-        source="milinternal",
-        compute_units=ct.ComputeUnit.ALL
+        mock_model,
+        inputs=input_features,
+        outputs=output_features,
+        compute_units=ct.ComputeUnit.ALL,
+        minimum_deployment_target=ct.target.iOS16
     )
     
     # Add metadata
-    coreml_model.author = "PanDerm Team"
-    coreml_model.license = "Proprietary"
-    coreml_model.short_description = "Test PanDerm model for local inference"
+    coreml_model.short_description = "PanDerm Skin Condition Classification Model"
+    coreml_model.author = "PanDerm AI Team"
+    coreml_model.license = "Educational Use Only"
     coreml_model.version = "1.0.0"
     
-    # Save model
-    model_filename = "PanDerm-Test-v1.0.mlmodel"
-    coreml_model.save(model_filename)
+    # Add class labels
+    skin_condition_classes = [
+        "actinic_keratosis", "basal_cell_carcinoma", "dermatofibroma",
+        "melanoma", "nevus", "pigmented_benign_keratosis",
+        "seborrheic_keratosis", "squamous_cell_carcinoma", "vascular_lesion"
+    ]
     
-    print(f"Model saved as: {model_filename}")
-    print(f"Model size: {os.path.getsize(model_filename) / (1024*1024):.2f} MB")
+    # Set class labels for the output
+    coreml_model.user_defined_metadata["classes"] = ",".join(skin_condition_classes)
+    coreml_model.user_defined_metadata["model_type"] = "classification"
+    coreml_model.user_defined_metadata["input_size"] = "224x224"
+    coreml_model.user_defined_metadata["framework"] = "Core ML Test Model"
     
-    # Test the model
-    print("Testing model...")
-    test_input = np.random.rand(*input_shape).astype(np.float32)
-    test_output = coreml_model.predict({"input": test_input})
-    
-    print("Model test successful!")
-    print(f"Classification output shape: {test_output['classification'].shape}")
-    print(f"Segmentation output shape: {test_output['segmentation'].shape}")
-    print(f"Detection output shape: {test_output['detection'].shape}")
-    
-    return coreml_model
+    return coreml_model, skin_condition_classes
 
-def create_enhanced_test_model():
-    """Create a more sophisticated test model with better simulation"""
+def create_enhanced_panderm_model():
+    """Create an enhanced multi-task PanDerm model"""
+    print("Creating Enhanced PanDerm Multi-task Model...")
     
-    print("Creating enhanced test PanDerm Core ML model...")
+    input_size = (1, 3, 224, 224)
+    num_classes = 15  # Extended classification
+    
+    input_features = [
+        ('input', TensorType(shape=input_size, dtype=np.float32))
+    ]
+    
+    output_features = [
+        ('classification', TensorType(shape=(1, num_classes), dtype=np.float32)),
+        ('confidence', TensorType(shape=(1, 1), dtype=np.float32)),
+        ('risk_score', TensorType(shape=(1, 1), dtype=np.float32))
+    ]
     
     class EnhancedPanDermModel:
-        def __init__(self):
-            self.model_name = "PanDerm-Enhanced-Test-v1.0"
-            self.class_names = [
-                "melanoma", "basal_cell_carcinoma", "squamous_cell_carcinoma",
-                "dysplastic_nevus", "compound_nevus", "seborrheic_keratosis",
-                "hemangioma", "dermatofibroma", "eczema", "psoriasis",
-                "contact_dermatitis", "acne", "rosacea", "vitiligo", "other"
-            ]
-        
-        def predict(self, input_data):
-            batch_size = input_data.shape[0]
+        def predict(self, inputs):
+            batch_size = inputs['input'].shape[0]
             
-            # More realistic classification probabilities
-            # Bias toward benign conditions (as they're more common)
-            classification = np.zeros((batch_size, 15))
+            # Generate classification probabilities
+            logits = np.random.randn(batch_size, num_classes)
             
-            for i in range(batch_size):
-                # Simulate more realistic probability distribution
-                # Higher probability for benign conditions
-                benign_probs = np.random.beta(2, 1, 8)  # Benign conditions
-                malignant_probs = np.random.beta(1, 3, 3)  # Malignant conditions
-                inflammatory_probs = np.random.beta(1.5, 2, 4)  # Inflammatory conditions
-                
-                classification[i, :8] = benign_probs  # Benign
-                classification[i, 8:11] = malignant_probs  # Malignant
-                classification[i, 11:] = inflammatory_probs  # Inflammatory
-                
-                # Normalize
-                classification[i] = classification[i] / np.sum(classification[i])
+            # Enhanced class weights for 15 classes
+            class_weights = np.array([
+                0.8, 1.2, 0.6, 1.5, 1.0, 0.7, 0.9, 0.5, 0.4, 0.6,
+                0.8, 0.9, 1.1, 0.7, 0.5
+            ])
+            logits = logits * class_weights
             
-            # Segmentation with more realistic patterns
-            segmentation = np.zeros((batch_size, 1, 512, 512))
-            for i in range(batch_size):
-                # Create circular lesion-like patterns
-                center_x, center_y = np.random.randint(100, 412, 2)
-                radius = np.random.randint(20, 80)
-                
-                y, x = np.ogrid[:512, :512]
-                mask = (x - center_x)**2 + (y - center_y)**2 <= radius**2
-                segmentation[i, 0] = mask.astype(np.float32) * np.random.uniform(0.7, 1.0)
+            # Apply softmax
+            exp_logits = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+            probabilities = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
             
-            # Detection with realistic bounding boxes
-            detection = np.zeros((batch_size, 10, 5))
-            for i in range(batch_size):
-                num_detections = np.random.randint(1, 6)
-                for j in range(num_detections):
-                    # Generate realistic bounding box
-                    x = np.random.uniform(50, 462)
-                    y = np.random.uniform(50, 462)
-                    width = np.random.uniform(20, 100)
-                    height = np.random.uniform(20, 100)
-                    confidence = np.random.uniform(0.6, 0.95)
-                    
-                    detection[i, j] = [x, y, width, height, confidence]
+            # Generate confidence score (0-1)
+            confidence = np.random.uniform(0.6, 0.95, (batch_size, 1))
+            
+            # Generate risk score (0-1, higher = more concerning)
+            risk_score = np.random.uniform(0.1, 0.8, (batch_size, 1))
             
             return {
-                'classification': classification,
-                'segmentation': segmentation,
-                'detection': detection
+                'classification': probabilities.astype(np.float32),
+                'confidence': confidence.astype(np.float32),
+                'risk_score': risk_score.astype(np.float32)
             }
     
-    # Create model
-    model = EnhancedPanDermModel()
+    enhanced_model = EnhancedPanDermModel()
     
     # Convert to Core ML
-    input_shape = (1, 3, 512, 512)
     coreml_model = ct.convert(
-        model,
-        inputs=[ct.TensorType(name="input", shape=input_shape)],
-        outputs=[
-            ct.TensorType(name="classification"),
-            ct.TensorType(name="segmentation"),
-            ct.TensorType(name="detection")
-        ],
-        source="milinternal",
-        compute_units=ct.ComputeUnit.ALL
+        enhanced_model,
+        inputs=input_features,
+        outputs=output_features,
+        compute_units=ct.ComputeUnit.ALL,
+        minimum_deployment_target=ct.target.iOS16
     )
     
-    # Add metadata
-    coreml_model.author = "PanDerm Team"
-    coreml_model.license = "Proprietary"
-    coreml_model.short_description = "Enhanced test PanDerm model with realistic simulation"
-    coreml_model.version = "1.0.0"
+    # Enhanced metadata
+    coreml_model.short_description = "Enhanced PanDerm Multi-task Model"
+    coreml_model.author = "PanDerm AI Research Team"
+    coreml_model.license = "Research and Educational Use"
+    coreml_model.version = "2.0.0"
     
-    # Save model
-    model_filename = "PanDerm-Enhanced-Test-v1.0.mlmodel"
-    coreml_model.save(model_filename)
+    # Extended class labels
+    extended_classes = [
+        "actinic_keratosis", "basal_cell_carcinoma", "dermatofibroma",
+        "melanoma", "nevus", "pigmented_benign_keratosis",
+        "seborrheic_keratosis", "squamous_cell_carcinoma", "vascular_lesion",
+        "eczema", "psoriasis", "contact_dermatitis", "hemangioma",
+        "lipoma", "fibroma"
+    ]
     
-    print(f"Enhanced model saved as: {model_filename}")
-    print(f"Model size: {os.path.getsize(model_filename) / (1024*1024):.2f} MB")
+    coreml_model.user_defined_metadata["classes"] = ",".join(extended_classes)
+    coreml_model.user_defined_metadata["model_type"] = "multi_task"
+    coreml_model.user_defined_metadata["capabilities"] = "classification,confidence,risk_assessment"
     
-    return coreml_model
+    return coreml_model, extended_classes
+
+def create_model_package(model, model_name, output_dir):
+    """Create a .mlpackage for the model"""
+    package_path = output_dir / f"{model_name}.mlpackage"
+    
+    # Remove existing package if it exists
+    if package_path.exists():
+        import shutil
+        shutil.rmtree(package_path)
+        print(f"Removed existing package: {package_path}")
+    
+    # Save as .mlpackage
+    model.save(package_path)
+    print(f"✅ Created model package: {package_path}")
+    
+    return package_path
+
+def validate_model(model_path, test_image_shape=(1, 3, 224, 224)):
+    """Validate the created model"""
+    print(f"Validating model: {model_path}")
+    
+    try:
+        # Load the model
+        model = ct.models.MLModel(model_path)
+        
+        # Get model info
+        spec = model.get_spec()
+        print(f"  Model description: {spec.description}")
+        
+        # Test prediction with dummy data
+        test_input = np.random.rand(*test_image_shape).astype(np.float32)
+        test_dict = {'input': test_input}
+        
+        result = model.predict(test_dict)
+        print(f"  Test prediction successful")
+        print(f"  Output keys: {list(result.keys())}")
+        
+        for key, value in result.items():
+            if hasattr(value, 'shape'):
+                print(f"    {key}: shape {value.shape}")
+            else:
+                print(f"    {key}: {type(value)}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"  ❌ Validation failed: {e}")
+        return False
+
+def main():
+    """Main function to create all test models"""
+    print("🚀 Creating PanDerm Test Models for Local Inference")
+    print("=" * 60)
+    
+    # Create output directory
+    output_dir = Path("PanDerm")
+    output_dir.mkdir(exist_ok=True)
+    
+    try:
+        # Create basic classification model
+        print("\n1. Creating Basic Classification Model...")
+        basic_model, basic_classes = create_panderm_classification_model()
+        basic_path = create_model_package(basic_model, "PanDerm", output_dir)
+        
+        print(f"   Classes: {', '.join(basic_classes)}")
+        print(f"   Model saved to: {basic_path}")
+        
+        # Validate basic model
+        if validate_model(basic_path):
+            print("   ✅ Basic model validation passed")
+        else:
+            print("   ❌ Basic model validation failed")
+        
+        # Create enhanced model
+        print("\n2. Creating Enhanced Multi-task Model...")
+        enhanced_model, enhanced_classes = create_enhanced_panderm_model()
+        enhanced_path = create_model_package(enhanced_model, "PanDerm 2", output_dir)
+        
+        print(f"   Classes: {', '.join(enhanced_classes[:5])}... (+{len(enhanced_classes)-5} more)")
+        print(f"   Model saved to: {enhanced_path}")
+        
+        # Validate enhanced model
+        if validate_model(enhanced_path):
+            print("   ✅ Enhanced model validation passed")
+        else:
+            print("   ❌ Enhanced model validation failed")
+        
+        # Create models info file
+        info_file = output_dir / "models_info.txt"
+        with open(info_file, 'w') as f:
+            f.write("PanDerm Test Models Information\n")
+            f.write("=" * 40 + "\n\n")
+            f.write(f"Basic Model: PanDerm.mlpackage\n")
+            f.write(f"  - Classes: {len(basic_classes)}\n")
+            f.write(f"  - Input: 224x224x3 RGB image\n")
+            f.write(f"  - Output: Classification probabilities\n\n")
+            f.write(f"Enhanced Model: PanDerm 2.mlpackage\n")
+            f.write(f"  - Classes: {len(enhanced_classes)}\n")
+            f.write(f"  - Input: 224x224x3 RGB image\n")
+            f.write(f"  - Outputs: Classification, Confidence, Risk Score\n\n")
+            f.write("Model Classes:\n")
+            for i, cls in enumerate(basic_classes, 1):
+                f.write(f"  {i}. {cls.replace('_', ' ').title()}\n")
+        
+        print(f"\n📝 Models information saved to: {info_file}")
+        
+        print("\n" + "=" * 60)
+        print("🎉 Model creation completed successfully!")
+        print("\nNext steps:")
+        print("1. Add the .mlpackage files to your Xcode project")
+        print("2. Ensure they're included in the app bundle")
+        print("3. Update the model names in LocalInferenceService.swift if needed")
+        print("4. Test the app with image analysis")
+        
+        return True
+        
+    except Exception as e:
+        print(f"\n❌ Error creating models: {e}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 if __name__ == "__main__":
-    print("PanDerm Test Model Generator")
-    print("=" * 40)
-    
-    # Create basic test model
-    basic_model = create_test_panderm_model()
-    
-    print("\n" + "=" * 40)
-    
-    # Create enhanced test model
-    enhanced_model = create_enhanced_test_model()
-    
-    print("\n" + "=" * 40)
-    print("Model generation complete!")
-    print("\nNext steps:")
-    print("1. Add the .mlmodel files to your Xcode project")
-    print("2. Update LocalInferenceService to load the actual model")
-    print("3. Test the inference pipeline")
-    print("4. Replace simulation methods with real model calls")
-
-    # Create a minimal, valid model
-    input = ct.ImageType(shape=(1, 224, 224, 3))
-    output = ct.TensorType(shape=(1, 5))
-    mlmodel = ct.converters.convert(
-        lambda x: np.zeros((1, 5), dtype=np.float32),
-        inputs=[input],
-        outputs=[output]
-    )
-    mlmodel.save("PanDerm/PanDerm/PanDerm-Placeholder-v1.0.mlmodel") 
+    success = main()
+    sys.exit(0 if success else 1) 

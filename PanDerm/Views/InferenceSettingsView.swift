@@ -3,248 +3,187 @@ import SwiftUI
 /// Settings view for managing PanDerm inference capabilities
 /// Provides control over local/cloud inference, model management, and performance monitoring
 struct InferenceSettingsView: View {
-    @StateObject private var inferenceManager = PanDermInferenceManager()
+    @EnvironmentObject private var inferenceManager: PanDermInferenceManager
     @State private var showingModelDownload = false
-    @State private var showingModelUpdate = false
     @State private var showingPerformanceStats = false
-    @State private var selectedInferenceMode: InferenceMode = .automatic
+    @State private var showingAbout = false
     
     var body: some View {
-        NavigationView {
-            List {
-                // Inference Mode Section
-                inferenceModeSection
-                
-                // Model Management Section
-                modelManagementSection
-                
-                // Performance Section
-                performanceSection
-                
-                // Network Status Section
-                networkStatusSection
-                
-                // Advanced Settings Section
-                advancedSettingsSection
-            }
-            .navigationTitle("Inference Settings")
-            .navigationBarTitleDisplayMode(.large)
-            .refreshable {
-                await refreshStatus()
-            }
-            .alert("Download Model", isPresented: $showingModelDownload) {
-                Button("Download") {
-                    Task {
-                        await downloadModel()
-                    }
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will download the PanDerm model for offline use. This may take several minutes and requires a stable internet connection.")
-            }
-            .alert("Update Model", isPresented: $showingModelUpdate) {
-                Button("Update") {
-                    Task {
-                        await updateModel()
-                    }
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will update your local PanDerm model to the latest version.")
-            }
-            .sheet(isPresented: $showingPerformanceStats) {
-                PerformanceStatsView(inferenceManager: inferenceManager)
-            }
-        }
-    }
-    
-    // MARK: - Inference Mode Section
-    
-    private var inferenceModeSection: some View {
-        Section("Inference Mode") {
-            ForEach(InferenceMode.allCases, id: \.self) { mode in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+        Form {
+            // Inference Mode Section
+            Section(header: Text("Inference Mode")) {
+                Picker("Mode", selection: $inferenceManager.inferenceMode) {
+                    ForEach(InferenceMode.allCases, id: \.self) { mode in
+                        VStack(alignment: .leading) {
                             Text(mode.rawValue)
-                                .font(.headline)
-                            
-                            if mode == inferenceManager.inferenceMode {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                            }
+                            Text(mode.description)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                        
-                        Text(mode.description)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    if mode == .local && inferenceManager.localModelStatus != .loaded {
-                        Text(inferenceManager.localModelStatus.rawValue)
-                            .font(.caption)
-                            .foregroundColor(.orange)
+                        .tag(mode)
                     }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedInferenceMode = mode
-                    inferenceManager.inferenceMode = mode
-                }
-            }
-        }
-    }
-    
-    // MARK: - Model Management Section
-    
-    private var modelManagementSection: some View {
-        Section("Model Management") {
-            // Model Status
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Local Model Status")
-                        .font(.headline)
-                    Text(inferenceManager.localModelStatus.rawValue)
-                        .font(.caption)
-                        .foregroundColor(statusColor)
-                }
+                .pickerStyle(.automatic)
                 
-                Spacer()
-                
-                if inferenceManager.inferenceProgress > 0 && inferenceManager.inferenceProgress < 1.0 {
-                    ProgressView(value: inferenceManager.inferenceProgress)
-                        .frame(width: 60)
-                }
-            }
-            
-            // Current Operation
-            if !inferenceManager.currentOperation.isEmpty {
-                HStack {
-                    Text("Current Operation")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text(inferenceManager.currentOperation)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // Model Version
-            HStack {
-                Text("Model Version")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text(inferenceManager.modelVersion)
+                Text("Automatic mode intelligently chooses between local and cloud inference based on availability and performance.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             
-            // Download Model Button
-            Button(action: { showingModelDownload = true }) {
+            // Model Status Section
+            Section(header: Text("Model Status")) {
                 HStack {
-                    Image(systemName: "arrow.down.circle")
-                    Text("Download Model")
+                    Label("Local Model", systemImage: "cpu")
+                    Spacer()
+                    ModelStatusBadge(status: inferenceManager.localModelStatus)
                 }
-            }
-            .disabled(!inferenceManager.isOnline)
-            
-            // Update Model Button
-            Button(action: { showingModelUpdate = true }) {
+                
+                if inferenceManager.localModelStatus == .loaded {
+                    HStack {
+                        Text("Model Version")
+                        Spacer()
+                        Text(inferenceManager.modelVersion)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
                 HStack {
-                    Image(systemName: "arrow.clockwise.circle")
-                    Text("Update Model")
-                }
-            }
-            .disabled(!inferenceManager.isOnline || inferenceManager.localModelStatus != .loaded)
-        }
-    }
-    
-    // MARK: - Performance Section
-    
-    private var performanceSection: some View {
-        Section("Performance") {
-            Button(action: { showingPerformanceStats = true }) {
-                HStack {
-                    Image(systemName: "chart.bar")
-                    Text("View Performance Statistics")
-                }
-            }
-            
-            Button(action: {
-                inferenceManager.clearPerformanceData()
-            }) {
-                HStack {
-                    Image(systemName: "trash")
-                    Text("Clear Performance Data")
-                }
-                .foregroundColor(.red)
-            }
-        }
-    }
-    
-    // MARK: - Network Status Section
-    
-    private var networkStatusSection: some View {
-        Section("Network Status") {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Internet Connection")
-                        .font(.headline)
-                    Text(inferenceManager.isOnline ? "Connected" : "Disconnected")
-                        .font(.caption)
+                    Label("Network Status", systemImage: "network")
+                    Spacer()
+                    Image(systemName: inferenceManager.isOnline ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundColor(inferenceManager.isOnline ? .green : .red)
                 }
-                
-                Spacer()
-                
-                Image(systemName: inferenceManager.isOnline ? "wifi" : "wifi.slash")
-                    .foregroundColor(inferenceManager.isOnline ? .green : .red)
             }
             
-            if !inferenceManager.isOnline {
+            // Performance Section
+            Section(header: Text("Performance")) {
+                Button(action: {
+                    showingPerformanceStats = true
+                }) {
+                    HStack {
+                        Label("Performance Statistics", systemImage: "chart.bar.fill")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Button(action: {
+                    inferenceManager.clearPerformanceData()
+                }) {
+                    Label("Clear Performance Data", systemImage: "trash")
+                        .foregroundColor(.red)
+                }
+            }
+            
+            // Model Management Section
+            Section(header: Text("Model Management")) {
+                Button(action: {
+                    Task {
+                        await inferenceManager.checkModelStatus()
+                    }
+                }) {
+                    Label("Refresh Model Status", systemImage: "arrow.clockwise")
+                }
+                
+                Button(action: {
+                    showingModelDownload = true
+                }) {
+                    Label("Download Latest Model", systemImage: "arrow.down.circle")
+                }
+                .disabled(inferenceManager.localModelStatus == .loading)
+            }
+            
+            // Data Management Section
+            Section(header: Text("Data Management")) {
                 HStack {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundColor(.orange)
-                    Text("Offline mode enabled - limited functionality available")
-                        .font(.caption)
+                    Text("Analysis History")
+                    Spacer()
+                    Text("\(inferenceManager.recentAnalyses.count) items")
+                        .foregroundColor(.secondary)
+                }
+                
+                Button(action: {
+                    clearAnalysisHistory()
+                }) {
+                    Label("Clear Analysis History", systemImage: "trash")
+                        .foregroundColor(.red)
+                }
+                .disabled(inferenceManager.recentAnalyses.isEmpty)
+            }
+            
+            // App Information Section
+            Section(header: Text("About")) {
+                Button(action: {
+                    showingAbout = true
+                }) {
+                    HStack {
+                        Label("About PanDerm", systemImage: "info.circle")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                HStack {
+                    Text("App Version")
+                    Spacer()
+                    Text("1.0.0")
                         .foregroundColor(.secondary)
                 }
             }
         }
-    }
-    
-    // MARK: - Advanced Settings Section
-    
-    private var advancedSettingsSection: some View {
-        Section("Advanced Settings") {
-            NavigationLink(destination: AdvancedInferenceSettingsView()) {
-                HStack {
-                    Image(systemName: "gearshape")
-                    Text("Advanced Settings")
-                }
-            }
-            
-            NavigationLink(destination: ModelInfoView()) {
-                HStack {
-                    Image(systemName: "info.circle")
-                    Text("Model Information")
-                }
-            }
+        .navigationTitle("Settings")
+        .sheet(isPresented: $showingPerformanceStats) {
+            PerformanceStatsView()
+        }
+        .sheet(isPresented: $showingModelDownload) {
+            ModelDownloadView()
+        }
+        .sheet(isPresented: $showingAbout) {
+            AboutView()
         }
     }
     
-    // MARK: - Helper Methods
+    private func clearAnalysisHistory() {
+        inferenceManager.recentAnalyses.removeAll()
+    }
+}
+
+struct ModelStatusBadge: View {
+    let status: ModelStatus
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: statusIcon)
+                .foregroundColor(statusColor)
+            Text(status.rawValue)
+                .font(.caption)
+                .foregroundColor(statusColor)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(statusColor.opacity(0.1))
+        .cornerRadius(8)
+    }
+    
+    private var statusIcon: String {
+        switch status {
+        case .loaded:
+            return "checkmark.circle.fill"
+        case .loading:
+            return "arrow.clockwise"
+        case .error:
+            return "exclamationmark.triangle.fill"
+        case .notLoaded:
+            return "questionmark.circle"
+        }
+    }
     
     private var statusColor: Color {
-        switch inferenceManager.localModelStatus {
+        switch status {
         case .loaded:
             return .green
         case .loading:
@@ -252,73 +191,67 @@ struct InferenceSettingsView: View {
         case .error:
             return .red
         case .notLoaded:
-            return .secondary
+            return .gray
         }
-    }
-    
-    private func refreshStatus() async {
-        inferenceManager.checkModelStatus()
-        inferenceManager.checkNetworkStatus()
-    }
-    
-    private func downloadModel() async {
-        // Placeholder for model download functionality
-        inferenceManager.currentOperation = "Downloading model..."
-        inferenceManager.inferenceProgress = 0.5
-        
-        // Simulate download
-        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-        
-        inferenceManager.inferenceProgress = 1.0
-        inferenceManager.currentOperation = "Model downloaded successfully"
-        inferenceManager.localModelStatus = .loaded
-    }
-    
-    private func updateModel() async {
-        // Placeholder for model update functionality
-        inferenceManager.currentOperation = "Updating model..."
-        inferenceManager.inferenceProgress = 0.5
-        
-        // Simulate update
-        try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
-        
-        inferenceManager.inferenceProgress = 1.0
-        inferenceManager.currentOperation = "Model updated successfully"
     }
 }
 
-// MARK: - Performance Stats View
-
 struct PerformanceStatsView: View {
-    @ObservedObject var inferenceManager: PanDermInferenceManager
+    @EnvironmentObject private var inferenceManager: PanDermInferenceManager
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
-            List {
-                let stats = inferenceManager.getPerformanceStats()
-                
-                Section("Inference Performance") {
-                    StatRow(title: "Total Inferences", value: "\(stats.totalInferences)")
-                    StatRow(title: "Average Time", value: formatTime(stats.averageInferenceTime))
-                    StatRow(title: "Total Risk Analyses", value: "\(stats.totalRiskAnalyses)")
-                    StatRow(title: "Average Risk Analysis Time", value: formatTime(stats.averageRiskAnalysisTime))
-                    StatRow(title: "Total Change Detections", value: "\(stats.totalChangeDetections)")
-                    StatRow(title: "Average Change Detection Time", value: formatTime(stats.averageChangeDetectionTime))
-                }
-                
-                Section("Mode Usage") {
-                    ForEach(InferenceMode.allCases, id: \.self) { mode in
-                        let count = stats.modeUsage[mode] ?? 0
-                        StatRow(title: mode.rawValue, value: "\(count) uses")
+            ScrollView {
+                VStack(spacing: 20) {
+                    let stats = inferenceManager.getPerformanceStats()
+                    
+                    // Inference Statistics
+                    StatCard(
+                        title: "Total Inferences",
+                        value: "\(stats.totalInferences)",
+                        subtitle: "Completed analyses",
+                        icon: "brain.head.profile"
+                    )
+                    
+                    StatCard(
+                        title: "Average Inference Time",
+                        value: String(format: "%.2f sec", stats.averageInferenceTime),
+                        subtitle: "Per analysis",
+                        icon: "stopwatch"
+                    )
+                    
+                    // Mode Usage Chart
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Inference Mode Usage")
+                            .font(.headline)
+                        
+                        ForEach(InferenceMode.allCases, id: \.self) { mode in
+                            let usage = stats.modeUsage[mode] ?? 0
+                            let percentage = stats.totalInferences > 0 ? Double(usage) / Double(stats.totalInferences) : 0
+                            
+                            HStack {
+                                Text(mode.rawValue)
+                                    .font(.subheadline)
+                                
+                                Spacer()
+                                
+                                Text("\(usage)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            ProgressView(value: percentage)
+                                .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                        }
                     }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
                 }
-                
-                Section("Performance Insights") {
-                    PerformanceInsightView(stats: stats)
-                }
+                .padding()
             }
-            .navigationTitle("Performance Statistics")
+            .navigationTitle("Performance Stats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -329,218 +262,218 @@ struct PerformanceStatsView: View {
             }
         }
     }
-    
-    private func formatTime(_ timeInterval: TimeInterval) -> String {
-        if timeInterval < 1.0 {
-            return String(format: "%.2f ms", timeInterval * 1000)
-        } else {
-            return String(format: "%.2f s", timeInterval)
-        }
-    }
 }
 
-// MARK: - Supporting Views
-
-struct StatRow: View {
+struct StatCard: View {
     let title: String
     let value: String
+    let subtitle: String
+    let icon: String
     
     var body: some View {
-        HStack {
-            Text(title)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.title)
+                .foregroundColor(.blue)
+                .frame(width: 40)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                
+                Text(value)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.blue)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             Spacer()
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+struct ModelDownloadView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var downloadProgress: Double = 0.0
+    @State private var isDownloading = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 30) {
+                VStack(spacing: 16) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.blue)
+                    
+                    Text("Download Latest Model")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text("Download the latest PanDerm AI model for improved accuracy and new features.")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                
+                if isDownloading {
+                    VStack(spacing: 12) {
+                        ProgressView(value: downloadProgress)
+                            .progressViewStyle(LinearProgressViewStyle())
+                        
+                        Text("Downloading... \(Int(downloadProgress * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                }
+                
+                Button(action: {
+                    startDownload()
+                }) {
+                    Text(isDownloading ? "Downloading..." : "Download Model")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(isDownloading ? Color.gray : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                }
+                .disabled(isDownloading)
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Model Download")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .disabled(isDownloading)
+                }
+            }
+        }
+    }
+    
+    private func startDownload() {
+        isDownloading = true
+        downloadProgress = 0.0
+        
+        // Simulate download progress
+        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+            downloadProgress += 0.05
             
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.medium)
+            if downloadProgress >= 1.0 {
+                timer.invalidate()
+                isDownloading = false
+                downloadProgress = 1.0
+                
+                // Auto-dismiss after completion
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    dismiss()
+                }
+            }
         }
     }
 }
 
-struct PerformanceInsightView: View {
-    let stats: PerformanceStats
+struct AboutView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 30) {
+                    VStack(spacing: 16) {
+                        Image(systemName: "stethoscope")
+                            .font(.system(size: 60))
+                            .foregroundColor(.blue)
+                        
+                        Text("PanDerm AI")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        
+                        Text("Advanced Dermatological Analysis")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 16) {
+                        AboutSection(
+                            title: "About PanDerm",
+                            content: "PanDerm uses advanced AI technology to assist in dermatological analysis. Our models are trained on extensive datasets to help identify various skin conditions with high accuracy."
+                        )
+                        
+                        AboutSection(
+                            title: "Features",
+                            content: "• Local AI inference on-device\n• Multi-class skin condition classification\n• Real-time analysis with confidence scores\n• Comprehensive analysis history\n• Performance monitoring and optimization"
+                        )
+                        
+                        AboutSection(
+                            title: "Disclaimer",
+                            content: "This app is for educational and informational purposes only. It should not be used as a substitute for professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider."
+                        )
+                    }
+                    
+                    VStack(spacing: 8) {
+                        Text("Version 1.0.0")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("© 2024 PanDerm Technologies")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("About")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct AboutSection: View {
+    let title: String
+    let content: String
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if stats.totalInferences > 0 {
-                let fastestMode = stats.modeUsage.min { a, b in
-                    stats.modeUsage[a.key] ?? 0 < stats.modeUsage[b.key] ?? 0
-                }?.key
-                
-                if let fastest = fastestMode {
-                    HStack {
-                        Image(systemName: "bolt.fill")
-                            .foregroundColor(.yellow)
-                        Text("Most used mode: \(fastest.rawValue)")
-                            .font(.caption)
-                    }
-                }
-                
-                if stats.averageInferenceTime < 2.0 {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("Good performance - average inference time under 2 seconds")
-                            .font(.caption)
-                    }
-                } else {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Consider optimizing - average inference time over 2 seconds")
-                            .font(.caption)
-                    }
-                }
-            } else {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.blue)
-                    Text("No performance data available yet")
-                        .font(.caption)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Advanced Settings View
-
-struct AdvancedInferenceSettingsView: View {
-    @AppStorage("enableGPUAcceleration") private var enableGPUAcceleration = true
-    @AppStorage("enableModelCaching") private var enableModelCaching = true
-    @AppStorage("maxBatchSize") private var maxBatchSize = 5
-    @AppStorage("inferenceTimeout") private var inferenceTimeout = 30.0
-    
-    var body: some View {
-        List {
-            Section("Hardware Acceleration") {
-                Toggle("Enable GPU Acceleration", isOn: $enableGPUAcceleration)
-                
-                if enableGPUAcceleration {
-                    Text("Uses Metal Performance Shaders for faster inference")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Section("Caching & Performance") {
-                Toggle("Enable Model Caching", isOn: $enableModelCaching)
-                
-                VStack(alignment: .leading) {
-                    Text("Maximum Batch Size: \(maxBatchSize)")
-                    Slider(value: Binding(
-                        get: { Double(maxBatchSize) },
-                        set: { maxBatchSize = Int($0) }
-                    ), in: 1...10, step: 1)
-                }
-                
-                VStack(alignment: .leading) {
-                    Text("Inference Timeout: \(String(format: "%.1f", inferenceTimeout))s")
-                    Slider(value: $inferenceTimeout, in: 10...60, step: 5)
-                }
-            }
-            
-            Section("Model Configuration") {
-                NavigationLink("Model Parameters") {
-                    ModelParametersView()
-                }
-                
-                NavigationLink("Preprocessing Settings") {
-                    PreprocessingSettingsView()
-                }
-            }
-        }
-        .navigationTitle("Advanced Settings")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Placeholder Views
-
-struct ModelInfoView: View {
-    var body: some View {
-        List {
-            Section("Model Details") {
-                ModelInfoRow(title: "Model Name", value: "PanDerm Foundation Model")
-                ModelInfoRow(title: "Version", value: "v1.0.0")
-                ModelInfoRow(title: "Architecture", value: "Vision Transformer")
-                ModelInfoRow(title: "Parameters", value: "1.2B")
-                ModelInfoRow(title: "Input Size", value: "512x512")
-                ModelInfoRow(title: "Output Classes", value: "15")
-            }
-            
-            Section("Capabilities") {
-                Text("• Skin cancer classification")
-                Text("• Lesion segmentation")
-                Text("• Risk assessment")
-                Text("• Change detection")
-                Text("• Multi-modal analysis")
-            }
-            
-            Section("Performance") {
-                ModelInfoRow(title: "Accuracy", value: "94.2%")
-                ModelInfoRow(title: "Sensitivity", value: "96.1%")
-                ModelInfoRow(title: "Specificity", value: "92.8%")
-                ModelInfoRow(title: "AUC", value: "0.97")
-            }
-        }
-        .navigationTitle("Model Information")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct ModelParametersView: View {
-    var body: some View {
-        List {
-            Section("Model Parameters") {
-                Text("This view would contain model parameter settings")
-                    .foregroundColor(.secondary)
-            }
-        }
-        .navigationTitle("Model Parameters")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct PreprocessingSettingsView: View {
-    var body: some View {
-        List {
-            Section("Preprocessing Settings") {
-                Text("This view would contain preprocessing settings")
-                    .foregroundColor(.secondary)
-            }
-        }
-        .navigationTitle("Preprocessing Settings")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct ModelInfoRow: View {
-    let title: String
-    let value: String
-    
-    var body: some View {
-        HStack {
             Text(title)
-                .font(.subheadline)
+                .font(.headline)
+                .fontWeight(.bold)
+            
+            Text(content)
+                .font(.body)
                 .foregroundColor(.secondary)
-            
-            Spacer()
-            
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.medium)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 
-// MARK: - Preview
-
-struct InferenceSettingsView_Previews: PreviewProvider {
-    static var previews: some View {
+#Preview {
+    NavigationView {
         InferenceSettingsView()
     }
+    .environmentObject(PanDermInferenceManager())
 } 

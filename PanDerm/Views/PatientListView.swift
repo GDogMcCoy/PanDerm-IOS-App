@@ -3,242 +3,210 @@ import SwiftUI
 /// Main view for displaying and managing the list of patients
 /// Features search, filtering, and navigation to patient details
 struct PatientListView: View {
-    @StateObject private var viewModel = PatientViewModel()
+    @StateObject private var patientViewModel = PatientViewModel()
+    @EnvironmentObject private var inferenceManager: PanDermInferenceManager
+    
     @State private var showingAddPatient = false
-    @State private var showingSampleDataAlert = false
+    @State private var selectedPatient: Patient?
+    @State private var showingPatientDetail = false
+    @State private var searchText = ""
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Search Bar
-                searchBar
-                
-                // Patient List
-                if viewModel.filteredPatients.isEmpty {
+            VStack {
+                if patientViewModel.patients.isEmpty {
                     emptyStateView
                 } else {
-                    patientList
+                    List {
+                        ForEach(filteredPatients) { patient in
+                            PatientRow(patient: patient)
+                                .onTapGesture {
+                                    selectedPatient = patient
+                                    showingPatientDetail = true
+                                }
+                        }
+                        .onDelete(perform: deletePatients)
+                    }
+                    .searchable(text: $searchText, prompt: "Search patients...")
                 }
             }
             .navigationTitle("Patients")
-            .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Sample Data") {
-                        showingSampleDataAlert = true
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingAddPatient = true
+                    }) {
+                        Image(systemName: "plus")
                     }
-                    .font(.caption)
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddPatient = true }) {
-                        Image(systemName: "plus")
+                if !patientViewModel.patients.isEmpty {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        EditButton()
                     }
                 }
             }
             .sheet(isPresented: $showingAddPatient) {
-                AddPatientView(viewModel: viewModel)
+                AddPatientView()
+                    .environmentObject(patientViewModel)
             }
-            .alert("Load Sample Data", isPresented: $showingSampleDataAlert) {
-                Button("Load") {
-                    viewModel.loadSampleData()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will load sample patient data for testing purposes.")
-            }
-            .onAppear {
-                viewModel.loadPatients()
-            }
-        }
-    }
-    
-    // MARK: - Search Bar
-    
-    private var searchBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
-            TextField("Search patients...", text: $viewModel.searchText)
-                .textFieldStyle(PlainTextFieldStyle())
-            
-            if !viewModel.searchText.isEmpty {
-                Button(action: { viewModel.searchText = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+            .sheet(isPresented: $showingPatientDetail) {
+                if let patient = selectedPatient {
+                    PatientDetailView(patient: patient)
+                        .environmentObject(patientViewModel)
+                        .environmentObject(inferenceManager)
                 }
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
-        .padding(.horizontal)
-        .padding(.top, 8)
     }
-    
-    // MARK: - Patient List
-    
-    private var patientList: some View {
-        List {
-            ForEach(viewModel.filteredPatients) { patient in
-                NavigationLink(destination: PatientDetailView(patient: patient, viewModel: viewModel)) {
-                    PatientRowView(patient: patient)
-                }
-            }
-            .onDelete(perform: deletePatients)
-        }
-        .listStyle(PlainListStyle())
-    }
-    
-    // MARK: - Empty State
     
     private var emptyStateView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "person.3")
+            Image(systemName: "person.3.fill")
                 .font(.system(size: 60))
-                .foregroundColor(.secondary)
+                .foregroundColor(.gray.opacity(0.5))
             
             Text("No Patients")
                 .font(.title2)
-                .fontWeight(.semibold)
+                .fontWeight(.medium)
             
-            Text("Add your first patient to get started with PanDerm analysis.")
+            Text("Add your first patient to start tracking skin analysis history")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal)
             
-            Button(action: { showingAddPatient = true }) {
-                HStack {
-                    Image(systemName: "plus")
-                    Text("Add Patient")
-                }
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
+            Button(action: {
+                showingAddPatient = true
+            }) {
+                Label("Add Patient", systemImage: "plus")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
     }
     
-    // MARK: - Actions
+    private var filteredPatients: [Patient] {
+        if searchText.isEmpty {
+            return patientViewModel.patients
+        } else {
+            return patientViewModel.patients.filter { patient in
+                patient.firstName.localizedCaseInsensitiveContains(searchText) ||
+                patient.lastName.localizedCaseInsensitiveContains(searchText) ||
+                patient.medicalRecordNumber.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
     
-    private func deletePatients(offsets: IndexSet) {
-        for index in offsets {
-            let patient = viewModel.filteredPatients[index]
-            viewModel.deletePatient(patient)
+    private func deletePatients(at offsets: IndexSet) {
+        let patientsToDelete = offsets.map { filteredPatients[$0] }
+        for patient in patientsToDelete {
+            patientViewModel.deletePatient(patient)
         }
     }
 }
 
-// MARK: - Patient Row View
-
-struct PatientRowView: View {
+struct PatientRow: View {
     let patient: Patient
     
     var body: some View {
         HStack(spacing: 12) {
-            // Patient Avatar
+            // Avatar
             Circle()
-                .fill(avatarColor)
+                .fill(Color.blue.opacity(0.1))
                 .frame(width: 50, height: 50)
-                .overlay(
+                .overlay {
                     Text(patient.initials)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                )
+                        .font(.headline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.blue)
+                }
             
-            // Patient Info
             VStack(alignment: .leading, spacing: 4) {
-                Text(patient.fullName)
+                // Name
+                Text("\(patient.firstName) \(patient.lastName)")
                     .font(.headline)
-                    .foregroundColor(.primary)
                 
-                Text("\(patient.age) years • \(patient.gender.displayName)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                if let email = patient.contactInfo.email {
-                    Text(email)
+                // Details
+                HStack {
+                    Text("Age \(patient.age)")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    
+                    Text("•")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(patient.medicalRecordNumber)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Recent activity
+                if let lastVisit = patient.medicalRecords.last {
+                    Text("Last visit: \(lastVisit.date, style: .date)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             
             Spacer()
             
-            // Risk Indicator
             VStack(alignment: .trailing, spacing: 4) {
-                RiskBadge(riskLevel: patient.riskFactors.riskLevel)
+                // Analysis count
+                Text("\(patient.analysisCount)")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.blue)
                 
-                Text("Risk Score: \(patient.riskFactors.riskScore)")
-                    .font(.caption2)
+                Text("analyses")
+                    .font(.caption)
                     .foregroundColor(.secondary)
             }
         }
         .padding(.vertical, 4)
     }
-    
-    private var avatarColor: Color {
-        switch patient.riskFactors.riskLevel {
-        case "Low": return .green
-        case "Medium": return .orange
-        case "High", "Very High": return .red
-        default: return .blue
-        }
-    }
 }
-
-// MARK: - Risk Badge
-
-struct RiskBadge: View {
-    let riskLevel: String
-    
-    var body: some View {
-        Text(riskLevel)
-            .font(.caption)
-            .fontWeight(.semibold)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(riskColor.opacity(0.2))
-            .foregroundColor(riskColor)
-            .cornerRadius(8)
-    }
-    
-    private var riskColor: Color {
-        switch riskLevel {
-        case "Low": return .green
-        case "Medium": return .orange
-        case "High": return .red
-        case "Very High": return .purple
-        default: return .blue
-        }
-    }
-}
-
-// MARK: - Add Patient View (Placeholder)
 
 struct AddPatientView: View {
-    @ObservedObject var viewModel: PatientViewModel
+    @EnvironmentObject private var patientViewModel: PatientViewModel
     @Environment(\.dismiss) private var dismiss
+    
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var dateOfBirth = Date()
+    @State private var medicalRecordNumber = ""
+    @State private var emergencyContact = ""
+    @State private var allergies = ""
+    @State private var currentMedications = ""
+    @State private var notes = ""
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("Add Patient View")
-                    .font(.title)
-                    .padding()
+            Form {
+                Section(header: Text("Personal Information")) {
+                    TextField("First Name", text: $firstName)
+                    TextField("Last Name", text: $lastName)
+                    DatePicker("Date of Birth", selection: $dateOfBirth, displayedComponents: .date)
+                    TextField("Medical Record Number", text: $medicalRecordNumber)
+                }
                 
-                Text("This view will contain a form to add new patients.")
-                    .foregroundColor(.secondary)
+                Section(header: Text("Contact Information")) {
+                    TextField("Emergency Contact", text: $emergencyContact)
+                }
                 
-                Spacer()
+                Section(header: Text("Medical History")) {
+                    TextField("Known Allergies", text: $allergies, axis: .vertical)
+                        .lineLimit(2...4)
+                    TextField("Current Medications", text: $currentMedications, axis: .vertical)
+                        .lineLimit(2...4)
+                    TextField("Additional Notes", text: $notes, axis: .vertical)
+                        .lineLimit(3...6)
+                }
             }
             .navigationTitle("Add Patient")
             .navigationBarTitleDisplayMode(.inline)
@@ -251,29 +219,36 @@ struct AddPatientView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        // TODO: Implement save functionality
-                        dismiss()
+                        savePatient()
                     }
+                    .disabled(!isFormValid)
                 }
             }
         }
     }
-}
-
-// MARK: - Patient Extensions
-
-extension Patient {
-    var initials: String {
-        let firstInitial = firstName.prefix(1).uppercased()
-        let lastInitial = lastName.prefix(1).uppercased()
-        return "\(firstInitial)\(lastInitial)"
+    
+    private var isFormValid: Bool {
+        !firstName.isEmpty && !lastName.isEmpty && !medicalRecordNumber.isEmpty
+    }
+    
+    private func savePatient() {
+        let newPatient = Patient(
+            firstName: firstName,
+            lastName: lastName,
+            dateOfBirth: dateOfBirth,
+            medicalRecordNumber: medicalRecordNumber,
+            emergencyContact: emergencyContact.isEmpty ? nil : emergencyContact,
+            allergies: allergies.isEmpty ? nil : allergies,
+            currentMedications: currentMedications.isEmpty ? nil : currentMedications,
+            notes: notes.isEmpty ? nil : notes
+        )
+        
+        patientViewModel.addPatient(newPatient)
+        dismiss()
     }
 }
 
-// MARK: - Preview
-
-struct PatientListView_Previews: PreviewProvider {
-    static var previews: some View {
-        PatientListView()
-    }
+#Preview {
+    PatientListView()
+        .environmentObject(PanDermInferenceManager())
 } 

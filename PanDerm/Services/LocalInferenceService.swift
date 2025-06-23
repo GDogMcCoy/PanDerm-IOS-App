@@ -274,6 +274,7 @@ class PanDermInferenceManager: ObservableObject {
     @Published var currentOperation: String = ""
     @Published var modelVersion: String = "v1.0.0"
     @Published var isOnline: Bool = true
+    @Published var recentAnalyses: [AnalysisSession] = []
     
     private let localInferenceService = LocalInferenceService()
     
@@ -283,17 +284,77 @@ class PanDermInferenceManager: ObservableObject {
         checkNetworkStatus()
     }
     
-    func checkModelStatus() {
-        if localInferenceService.isModelLoaded {
-            localModelStatus = .loaded
-        } else {
-            localModelStatus = .notLoaded
+    func initializeServices() {
+        Task {
+            await checkModelStatus()
+            await checkNetworkStatus()
+            await loadRecentAnalyses()
         }
     }
     
-    func checkNetworkStatus() {
+    @MainActor
+    func checkModelStatus() async {
+        if localInferenceService.isModelLoaded {
+            localModelStatus = .loaded
+            modelVersion = localInferenceService.modelVersion
+        } else {
+            localModelStatus = .loading
+            // Wait for model to load
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            if localInferenceService.isModelLoaded {
+                localModelStatus = .loaded
+                modelVersion = localInferenceService.modelVersion
+            } else {
+                localModelStatus = .error
+            }
+        }
+    }
+    
+    func checkNetworkStatus() async {
         // Simple network check - in a real app, you'd implement proper network monitoring
         isOnline = true
+    }
+    
+    func loadRecentAnalyses() async {
+        // Load recent analysis sessions from persistence
+        // For now, create some sample data
+        await MainActor.run {
+            recentAnalyses = []
+        }
+    }
+    
+    func analyzeImage(_ image: UIImage) async throws -> AnalysisResult {
+        let startTime = Date()
+        
+        // Perform analysis based on selected mode
+        let classifications = try await localInferenceService.analyzeImage(image)
+        
+        // Create analysis result
+        let result = AnalysisResult(
+            classifications: classifications,
+            segmentationMask: nil,
+            detectedObjects: []
+        )
+        
+        // Create analysis session for history
+        let session = AnalysisSession(
+            id: UUID(),
+            timestamp: startTime,
+            image: SkinImage(imageData: image.jpegData(compressionQuality: 0.8) ?? Data()),
+            result: result,
+            inferenceMode: inferenceMode,
+            modelVersion: modelVersion
+        )
+        
+        // Add to recent analyses
+        await MainActor.run {
+            recentAnalyses.insert(session, at: 0)
+            if recentAnalyses.count > 50 {
+                recentAnalyses.removeLast()
+            }
+        }
+        
+        return result
     }
     
     func clearPerformanceData() {
@@ -311,6 +372,67 @@ class PanDermInferenceManager: ObservableObject {
             averageChangeDetectionTime: 0,
             modeUsage: [.local: metrics.totalInferences, .cloud: 0]
         )
+    }
+}
+
+// MARK: - Analysis Session for History
+
+struct AnalysisSession: Identifiable, Codable {
+    let id: UUID
+    let timestamp: Date
+    let image: SkinImage
+    let result: AnalysisResult
+    let inferenceMode: InferenceMode
+    let modelVersion: String
+    
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: timestamp)
+    }
+}
+
+// Update AnalysisResult to be Codable
+extension AnalysisResult: Codable {
+    enum CodingKeys: CodingKey {
+        case classifications
+        case detectedObjects
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        classifications = try container.decode([ClassificationResult].self, forKey: .classifications)
+        detectedObjects = try container.decode([DetectedObject].self, forKey: .detectedObjects)
+        segmentationMask = nil // Can't encode CGImage
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(classifications, forKey: .classifications)
+        try container.encode(detectedObjects, forKey: .detectedObjects)
+    }
+}
+
+// Update DetectedObject to be Codable
+extension DetectedObject: Codable {
+    enum CodingKeys: CodingKey {
+        case boundingBox, label, confidence
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let bbox = try container.decode([Double].self, forKey: .boundingBox)
+        boundingBox = CGRect(x: bbox[0], y: bbox[1], width: bbox[2], height: bbox[3])
+        label = try container.decode(String.self, forKey: .label)
+        confidence = try container.decode(Double.self, forKey: .confidence)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode([boundingBox.origin.x, boundingBox.origin.y, boundingBox.size.width, boundingBox.size.height], forKey: .boundingBox)
+        try container.encode(label, forKey: .label)
+        try container.encode(confidence, forKey: .confidence)
     }
 }
 

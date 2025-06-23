@@ -1,45 +1,38 @@
 import Foundation
 import SwiftUI
 
-/// ViewModel for managing patient data
+/// ViewModel for managing patient data and operations
 @MainActor
 class PatientViewModel: ObservableObject {
+    
+    // MARK: - Published Properties
+    
     @Published var patients: [Patient] = []
-    @Published var selectedPatient: Patient?
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var searchText = ""
+    @Published var selectedPatient: Patient?
     
-    // The dependency on PanDermInferenceManager has been removed.
-    // This ViewModel is now only responsible for patient data management.
-    // Inference and analysis are handled by LocalInferenceService and SkinConditionViewModel.
+    // MARK: - Initialization
     
-    // MARK: - Computed Properties
-    
-    var filteredPatients: [Patient] {
-        if searchText.isEmpty {
-            return patients
-        } else {
-            return patients.filter { patient in
-                patient.fullName.localizedCaseInsensitiveContains(searchText) ||
-                patient.contactInfo.email?.localizedCaseInsensitiveContains(searchText) == true ||
-                patient.contactInfo.phone?.localizedCaseInsensitiveContains(searchText) == true
-            }
-        }
-    }
-    
-    // These computed properties remain as they are based on patient data, not inference.
-    var highRiskPatients: [Patient] {
-        // This logic would be updated based on a more robust risk model
-        return patients.filter { $0.riskFactors.riskScore > 7 }
-    }
-    
-    var patientsNeedingFollowUp: [Patient] {
-        // This would be implemented with real appointment data
-        return []
+    init() {
+        loadPatients()
     }
     
     // MARK: - Patient Management
+    
+    func loadPatients() {
+        isLoading = true
+        
+        // Load from UserDefaults or Core Data
+        // For now, load sample data in debug mode
+        #if DEBUG
+        if patients.isEmpty {
+            patients = Patient.sampleData
+        }
+        #endif
+        
+        isLoading = false
+    }
     
     func addPatient(_ patient: Patient) {
         patients.append(patient)
@@ -48,7 +41,9 @@ class PatientViewModel: ObservableObject {
     
     func updatePatient(_ patient: Patient) {
         if let index = patients.firstIndex(where: { $0.id == patient.id }) {
-            patients[index] = patient
+            var updatedPatient = patient
+            updatedPatient.updatedAt = Date()
+            patients[index] = updatedPatient
             savePatients()
         }
     }
@@ -58,101 +53,211 @@ class PatientViewModel: ObservableObject {
         savePatients()
     }
     
-    func selectPatient(_ patient: Patient) {
-        selectedPatient = patient
+    func getPatient(by id: UUID) -> Patient? {
+        return patients.first { $0.id == id }
     }
     
-    // MARK: - Risk Assessment (Simplified)
+    // MARK: - Medical Records Management
     
-    func getRiskLevel(for patient: Patient) -> String {
-        // Simplified risk level calculation
-        switch patient.riskFactors.riskScore {
-        case 0...3:
-            return "Low"
-        case 4...6:
-            return "Medium"
-        case 7...10:
-            return "High"
-        default:
-            return "Unknown"
+    func addMedicalRecord(_ medicalRecord: MedicalRecord, to patient: Patient) {
+        if let index = patients.firstIndex(where: { $0.id == patient.id }) {
+            patients[index].medicalRecords.append(medicalRecord)
+            patients[index].updatedAt = Date()
+            savePatients()
         }
     }
     
-    func getRiskRecommendations(for patient: Patient) -> [String] {
-        var recommendations: [String] = []
-        
-        if patient.riskFactors.fairSkin {
-            recommendations.append("Use broad-spectrum sunscreen with SPF 30+ daily.")
+    func updateMedicalRecord(_ medicalRecord: MedicalRecord, for patient: Patient) {
+        if let patientIndex = patients.firstIndex(where: { $0.id == patient.id }),
+           let recordIndex = patients[patientIndex].medicalRecords.firstIndex(where: { $0.id == medicalRecord.id }) {
+            patients[patientIndex].medicalRecords[recordIndex] = medicalRecord
+            patients[patientIndex].updatedAt = Date()
+            savePatients()
         }
-        if patient.riskFactors.manyMoles {
-            recommendations.append("Schedule regular skin cancer screenings.")
-        }
-        if patient.riskFactors.severeSunburns {
-            recommendations.append("Avoid peak sun hours (10 AM - 4 PM).")
-        }
-        if patient.riskFactors.familyHistory || patient.riskFactors.personalHistory {
-            recommendations.append("Inform your dermatologist of your history.")
-        }
-        
-        return recommendations
     }
     
-    // All methods and properties related to PanDermInferenceManager have been removed.
-    // This includes `analyzePatientRisk`, `generatePatientReport`, `inferenceStatus`, etc.
-    // as they were tied to the old, complex architecture.
+    func deleteMedicalRecord(_ medicalRecord: MedicalRecord, from patient: Patient) {
+        if let patientIndex = patients.firstIndex(where: { $0.id == patient.id }) {
+            patients[patientIndex].medicalRecords.removeAll { $0.id == medicalRecord.id }
+            patients[patientIndex].updatedAt = Date()
+            savePatients()
+        }
+    }
     
-    private func getRiskFactors(for patient: Patient) -> [String] {
-        var factors: [String] = []
-        
-        if patient.riskFactors.fairSkin { factors.append("Fair skin") }
-        if patient.riskFactors.lightHair { factors.append("Light hair") }
-        if patient.riskFactors.lightEyes { factors.append("Light eyes") }
-        if patient.riskFactors.freckles { factors.append("Freckles") }
-        if patient.riskFactors.manyMoles { factors.append("Many moles") }
-        if patient.riskFactors.atypicalMoles { factors.append("Atypical moles") }
-        if patient.riskFactors.severeSunburns { factors.append("History of severe sunburns") }
-        if patient.riskFactors.familyHistory { factors.append("Family history of skin cancer") }
-        if patient.riskFactors.personalHistory { factors.append("Personal history of skin cancer") }
-        if patient.riskFactors.immunosuppression { factors.append("Immunosuppression") }
-        if patient.riskFactors.xerodermaPigmentosum { factors.append("Xeroderma pigmentosum") }
-        
-        return factors
+    // MARK: - Analysis Results Management
+    
+    func addAnalysisResult(_ analysisSession: AnalysisSession, to medicalRecord: MedicalRecord, for patient: Patient) {
+        if let patientIndex = patients.firstIndex(where: { $0.id == patient.id }),
+           let recordIndex = patients[patientIndex].medicalRecords.firstIndex(where: { $0.id == medicalRecord.id }) {
+            patients[patientIndex].medicalRecords[recordIndex].analysisResults.append(analysisSession)
+            patients[patientIndex].updatedAt = Date()
+            savePatients()
+        }
     }
     
     // MARK: - Data Persistence
     
     private func savePatients() {
-        // This would integrate with Core Data or other persistence layer.
-        // For now, we'll use UserDefaults as a simple storage solution.
-        if let encoded = try? JSONEncoder().encode(patients) {
-            UserDefaults.standard.set(encoded, forKey: "savedPatients")
+        do {
+            let data = try JSONEncoder().encode(patients)
+            UserDefaults.standard.set(data, forKey: "SavedPatients")
+        } catch {
+            errorMessage = "Failed to save patients: \(error.localizedDescription)"
         }
     }
     
-    func loadPatients() {
-        if let data = UserDefaults.standard.data(forKey: "savedPatients"),
-           let decoded = try? JSONDecoder().decode([Patient].self, from: data) {
-            patients = decoded
-        } else {
-            // Load sample data if no saved data is found
+    private func loadPatientsFromStorage() {
+        guard let data = UserDefaults.standard.data(forKey: "SavedPatients") else {
+            return
+        }
+        
+        do {
+            patients = try JSONDecoder().decode([Patient].self, from: data)
+        } catch {
+            errorMessage = "Failed to load patients: \(error.localizedDescription)"
+            // Fall back to sample data in debug mode
+            #if DEBUG
             patients = Patient.sampleData
+            #endif
         }
     }
     
-    func loadSampleData() {
-        patients = Patient.sampleData
-        savePatients()
+    // MARK: - Search and Filter
+    
+    func searchPatients(query: String) -> [Patient] {
+        if query.isEmpty {
+            return patients
+        }
+        
+        return patients.filter { patient in
+            patient.firstName.localizedCaseInsensitiveContains(query) ||
+            patient.lastName.localizedCaseInsensitiveContains(query) ||
+            patient.medicalRecordNumber.localizedCaseInsensitiveContains(query)
+        }
     }
     
-    func analyzePatientRisk() async {
-        // Placeholder for patient risk analysis
-        // This would integrate with the LocalInferenceService for actual analysis
-        isLoading = true
+    func getRecentPatients(limit: Int = 5) -> [Patient] {
+        return patients
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(limit)
+            .map { $0 }
+    }
+    
+    func getPatientsWithRecentAnalysis() -> [Patient] {
+        let oneWeekAgo = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: Date()) ?? Date()
         
-        // Simulate analysis delay
-        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        return patients.filter { patient in
+            patient.medicalRecords.contains { record in
+                record.analysisResults.contains { analysis in
+                    analysis.timestamp >= oneWeekAgo
+                }
+            }
+        }
+    }
+    
+    // MARK: - Statistics
+    
+    func getTotalAnalysisCount() -> Int {
+        return patients.reduce(0) { total, patient in
+            total + patient.analysisCount
+        }
+    }
+    
+    func getAverageAge() -> Double {
+        guard !patients.isEmpty else { return 0 }
+        let totalAge = patients.reduce(0) { $0 + $1.age }
+        return Double(totalAge) / Double(patients.count)
+    }
+    
+    func getAnalysisCountForPatient(_ patient: Patient) -> Int {
+        return patient.analysisCount
+    }
+    
+    // MARK: - Export and Import
+    
+    func exportPatientData(_ patient: Patient) -> Data? {
+        do {
+            return try JSONEncoder().encode(patient)
+        } catch {
+            errorMessage = "Failed to export patient data: \(error.localizedDescription)"
+            return nil
+        }
+    }
+    
+    func exportAllPatientsData() -> Data? {
+        do {
+            return try JSONEncoder().encode(patients)
+        } catch {
+            errorMessage = "Failed to export all patients data: \(error.localizedDescription)"
+            return nil
+        }
+    }
+    
+    func importPatientData(_ data: Data) -> Bool {
+        do {
+            let importedPatient = try JSONDecoder().decode(Patient.self, from: data)
+            
+            // Check if patient already exists
+            if !patients.contains(where: { $0.id == importedPatient.id }) {
+                addPatient(importedPatient)
+                return true
+            } else {
+                errorMessage = "Patient already exists"
+                return false
+            }
+        } catch {
+            errorMessage = "Failed to import patient data: \(error.localizedDescription)"
+            return false
+        }
+    }
+    
+    // MARK: - Validation
+    
+    func validatePatient(_ patient: Patient) -> [String] {
+        var errors: [String] = []
         
-        isLoading = false
+        if patient.firstName.trimmingCharacters(in: .whitespaces).isEmpty {
+            errors.append("First name is required")
+        }
+        
+        if patient.lastName.trimmingCharacters(in: .whitespaces).isEmpty {
+            errors.append("Last name is required")
+        }
+        
+        if patient.medicalRecordNumber.trimmingCharacters(in: .whitespaces).isEmpty {
+            errors.append("Medical record number is required")
+        }
+        
+        // Check for duplicate medical record number
+        if patients.contains(where: { $0.medicalRecordNumber == patient.medicalRecordNumber && $0.id != patient.id }) {
+            errors.append("Medical record number already exists")
+        }
+        
+        // Validate age (must be reasonable)
+        if patient.age < 0 || patient.age > 150 {
+            errors.append("Invalid date of birth")
+        }
+        
+        return errors
+    }
+    
+    func isValidPatient(_ patient: Patient) -> Bool {
+        return validatePatient(patient).isEmpty
+    }
+    
+    // MARK: - Helper Methods
+    
+    func clearAllData() {
+        patients.removeAll()
+        UserDefaults.standard.removeObject(forKey: "SavedPatients")
+    }
+    
+    func refreshData() {
+        loadPatientsFromStorage()
+    }
+    
+    func getPatientAnalysisHistory(_ patient: Patient) -> [AnalysisSession] {
+        return patient.medicalRecords.flatMap { $0.analysisResults }
     }
 }
 

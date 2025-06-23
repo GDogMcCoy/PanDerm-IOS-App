@@ -38,7 +38,7 @@ struct PatientDetailView: View {
                     
                     Button("PanDerm Analysis") {
                         Task {
-                            await viewModel.analyzePatientRisk(with: panDermService)
+                            await viewModel.analyzePatientRisk()
                             showingAnalysisResults = true
                         }
                     }
@@ -55,7 +55,7 @@ struct PatientDetailView: View {
             EditPatientView(patient: patient, viewModel: viewModel)
         }
         .sheet(isPresented: $showingAnalysisResults) {
-            AnalysisResultsView(patient: patient, viewModel: viewModel)
+            PatientAnalysisResultsView(patient: patient, viewModel: viewModel)
         }
         .onAppear {
             viewModel.selectPatient(patient)
@@ -501,7 +501,7 @@ struct EditPatientView: View {
     }
 }
 
-struct AnalysisResultsView: View {
+struct PatientAnalysisResultsView: View {
     let patient: Patient
     @ObservedObject var viewModel: PatientViewModel
     @Environment(\.dismiss) private var dismiss

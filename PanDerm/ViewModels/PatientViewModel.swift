@@ -1,8 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// ViewModel for managing patient data and PanDerm analysis
-/// Handles patient CRUD operations, risk assessment, and AI integration with local inference
+/// ViewModel for managing patient data
 @MainActor
 class PatientViewModel: ObservableObject {
     @Published var patients: [Patient] = []
@@ -11,8 +10,9 @@ class PatientViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var searchText = ""
     
-    // Inference manager for local/cloud analysis
-    @StateObject private var inferenceManager = PanDermInferenceManager()
+    // The dependency on PanDermInferenceManager has been removed.
+    // This ViewModel is now only responsible for patient data management.
+    // Inference and analysis are handled by LocalInferenceService and SkinConditionViewModel.
     
     // MARK: - Computed Properties
     
@@ -28,12 +28,14 @@ class PatientViewModel: ObservableObject {
         }
     }
     
+    // These computed properties remain as they are based on patient data, not inference.
     var highRiskPatients: [Patient] {
-        patients.filter { $0.riskFactors.riskLevel == "High" || $0.riskFactors.riskLevel == "Very High" }
+        // This logic would be updated based on a more robust risk model
+        return patients.filter { $0.riskFactors.riskScore > 7 }
     }
     
     var patientsNeedingFollowUp: [Patient] {
-        // This would be implemented with appointment data
+        // This would be implemented with real appointment data
         return []
     }
     
@@ -60,170 +62,44 @@ class PatientViewModel: ObservableObject {
         selectedPatient = patient
     }
     
-    // MARK: - Risk Assessment
-    
-    func calculateRiskScore(for patient: Patient) -> Int {
-        return patient.riskFactors.riskScore
-    }
+    // MARK: - Risk Assessment (Simplified)
     
     func getRiskLevel(for patient: Patient) -> String {
-        return patient.riskFactors.riskLevel
+        // Simplified risk level calculation
+        switch patient.riskFactors.riskScore {
+        case 0...3:
+            return "Low"
+        case 4...6:
+            return "Medium"
+        case 7...10:
+            return "High"
+        default:
+            return "Unknown"
+        }
     }
     
     func getRiskRecommendations(for patient: Patient) -> [String] {
         var recommendations: [String] = []
         
         if patient.riskFactors.fairSkin {
-            recommendations.append("Use broad-spectrum sunscreen with SPF 30+ daily")
+            recommendations.append("Use broad-spectrum sunscreen with SPF 30+ daily.")
         }
         if patient.riskFactors.manyMoles {
-            recommendations.append("Schedule regular skin cancer screenings")
+            recommendations.append("Schedule regular skin cancer screenings.")
         }
         if patient.riskFactors.severeSunburns {
-            recommendations.append("Avoid peak sun hours (10 AM - 4 PM)")
+            recommendations.append("Avoid peak sun hours (10 AM - 4 PM).")
         }
-        if patient.riskFactors.familyHistory {
-            recommendations.append("Consider genetic counseling")
+        if patient.riskFactors.familyHistory || patient.riskFactors.personalHistory {
+            recommendations.append("Inform your dermatologist of your history.")
         }
         
         return recommendations
     }
     
-    // MARK: - PanDerm Integration with Local Inference
-    
-    func analyzePatientRisk() async {
-        guard let patient = selectedPatient else { return }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            let analysisResult = try await inferenceManager.analyzePatientRisk(patient)
-            
-            // Note: Since riskScore and riskLevel are computed properties,
-            // we can't directly update them. In a real implementation,
-            // you would store the analysis results in the patient's medical record
-            // or create a separate risk analysis record.
-            
-            // For now, we'll just log the analysis results
-            print("Risk analysis completed for \(patient.fullName)")
-            print("AI Risk Score: \(analysisResult.riskScore)")
-            print("AI Risk Level: \(analysisResult.riskLevel)")
-            print("Risk Factors: \(analysisResult.riskFactors)")
-            print("Recommendations: \(analysisResult.recommendations)")
-            
-        } catch {
-            errorMessage = "Failed to analyze patient risk: \(error.localizedDescription)"
-        }
-        
-        isLoading = false
-    }
-    
-    func generatePatientReport() -> PatientReport {
-        guard let patient = selectedPatient else {
-            return PatientReport(patient: Patient(id: UUID(), firstName: "", lastName: "", dateOfBirth: Date(), gender: .male, contactInfo: ContactInfo()), riskAssessment: nil, recommendations: [])
-        }
-        
-        let riskScore = calculateRiskScore(for: patient)
-        let riskLevel = getRiskLevel(for: patient)
-        let recommendations = getRiskRecommendations(for: patient)
-        
-        let riskAssessment = RiskAssessment(
-            score: riskScore,
-            level: riskLevel,
-            factors: getRiskFactors(for: patient),
-            lastUpdated: Date()
-        )
-        
-        return PatientReport(
-            patient: patient,
-            riskAssessment: riskAssessment,
-            recommendations: recommendations
-        )
-    }
-    
-    // MARK: - Batch Risk Analysis
-    
-    func analyzeAllPatientsRisk() async {
-        guard !patients.isEmpty else { return }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        for patient in patients {
-            do {
-                let analysisResult = try await inferenceManager.analyzePatientRisk(patient)
-                
-                // Log analysis results for each patient
-                print("Risk analysis completed for \(patient.fullName)")
-                print("AI Risk Score: \(analysisResult.riskScore)")
-                print("AI Risk Level: \(analysisResult.riskLevel)")
-                
-            } catch {
-                errorMessage = "Failed to analyze risk for \(patient.fullName): \(error.localizedDescription)"
-            }
-        }
-        
-        isLoading = false
-    }
-    
-    // MARK: - Inference Status and Monitoring
-    
-    var inferenceStatus: String {
-        if !inferenceManager.currentOperation.isEmpty {
-            return "\(inferenceManager.currentOperation) (\(Int(inferenceManager.inferenceProgress * 100))%)"
-        } else {
-            return "Ready"
-        }
-    }
-    
-    var inferenceMode: String {
-        return inferenceManager.inferenceMode.rawValue
-    }
-    
-    var isLocalModelAvailable: Bool {
-        return inferenceManager.localModelStatus == .loaded
-    }
-    
-    var isOnline: Bool {
-        return inferenceManager.isOnline
-    }
-    
-    var currentOperation: String {
-        return inferenceManager.currentOperation
-    }
-    
-    var inferenceProgress: Double {
-        return inferenceManager.inferenceProgress
-    }
-    
-    // MARK: - Performance Monitoring
-    
-    func getPerformanceStats() -> PerformanceStats {
-        return inferenceManager.getPerformanceStats()
-    }
-    
-    func clearPerformanceData() {
-        inferenceManager.clearPerformanceData()
-    }
-    
-    // MARK: - Model Management
-    
-    func downloadModel() async {
-        do {
-            try await inferenceManager.downloadModel()
-        } catch {
-            errorMessage = "Failed to download model: \(error.localizedDescription)"
-        }
-    }
-    
-    func updateModel() async {
-        do {
-            try await inferenceManager.updateLocalModel()
-        } catch {
-            errorMessage = "Failed to update model: \(error.localizedDescription)"
-        }
-    }
+    // All methods and properties related to PanDermInferenceManager have been removed.
+    // This includes `analyzePatientRisk`, `generatePatientReport`, `inferenceStatus`, etc.
+    // as they were tied to the old, complex architecture.
     
     private func getRiskFactors(for patient: Patient) -> [String] {
         var factors: [String] = []
@@ -246,8 +122,8 @@ class PatientViewModel: ObservableObject {
     // MARK: - Data Persistence
     
     private func savePatients() {
-        // This would integrate with Core Data or other persistence layer
-        // For now, we'll use UserDefaults as a simple storage solution
+        // This would integrate with Core Data or other persistence layer.
+        // For now, we'll use UserDefaults as a simple storage solution.
         if let encoded = try? JSONEncoder().encode(patients) {
             UserDefaults.standard.set(encoded, forKey: "savedPatients")
         }
@@ -257,60 +133,26 @@ class PatientViewModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: "savedPatients"),
            let decoded = try? JSONDecoder().decode([Patient].self, from: data) {
             patients = decoded
+        } else {
+            // Load sample data if no saved data is found
+            patients = Patient.sampleData
         }
     }
     
-    // MARK: - Sample Data
-    
     func loadSampleData() {
-        let samplePatients = [
-            Patient(
-                firstName: "John",
-                lastName: "Smith",
-                dateOfBirth: Calendar.current.date(byAdding: .year, value: -45, to: Date()) ?? Date(),
-                gender: .male,
-                ethnicity: .white,
-                skinType: .type2,
-                contactInfo: ContactInfo(
-                    email: "john.smith@email.com",
-                    phone: "555-0123"
-                ),
-                medicalHistory: MedicalHistory(
-                    familyHistory: FamilyHistory(melanoma: true)
-                ),
-                riskFactors: RiskFactors(
-                    fairSkin: true,
-                    lightHair: true,
-                    lightEyes: true,
-                    freckles: true,
-                    manyMoles: true,
-                    severeSunburns: true,
-                    familyHistory: true
-                )
-            ),
-            Patient(
-                firstName: "Sarah",
-                lastName: "Johnson",
-                dateOfBirth: Calendar.current.date(byAdding: .year, value: -32, to: Date()) ?? Date(),
-                gender: .female,
-                ethnicity: .white,
-                skinType: .type1,
-                contactInfo: ContactInfo(
-                    email: "sarah.johnson@email.com",
-                    phone: "555-0456"
-                ),
-                riskFactors: RiskFactors(
-                    fairSkin: true,
-                    lightHair: true,
-                    lightEyes: true,
-                    freckles: true,
-                    severeSunburns: true
-                )
-            )
-        ]
-        
-        patients = samplePatients
+        patients = Patient.sampleData
         savePatients()
+    }
+    
+    func analyzePatientRisk() async {
+        // Placeholder for patient risk analysis
+        // This would integrate with the LocalInferenceService for actual analysis
+        isLoading = true
+        
+        // Simulate analysis delay
+        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        
+        isLoading = false
     }
 }
 

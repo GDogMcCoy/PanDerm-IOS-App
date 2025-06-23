@@ -51,6 +51,27 @@ struct Patient: Identifiable, Codable {
     var age: Int {
         Calendar.current.dateComponents([.year], from: dateOfBirth, to: Date()).year ?? 0
     }
+    
+    #if DEBUG
+    static let sampleData: [Patient] = [
+        Patient(
+            firstName: "John",
+            lastName: "Appleseed",
+            dateOfBirth: Calendar.current.date(byAdding: .year, value: -45, to: Date())!,
+            gender: .male,
+            contactInfo: ContactInfo(email: "john.appleseed@example.com", phone: "555-123-4567"),
+            riskFactors: RiskFactors(fairSkin: true, manyMoles: true, severeSunburns: true, familyHistory: true)
+        ),
+        Patient(
+            firstName: "Jane",
+            lastName: "Doe",
+            dateOfBirth: Calendar.current.date(byAdding: .year, value: -32, to: Date())!,
+            gender: .female,
+            contactInfo: ContactInfo(email: "jane.doe@example.com", phone: "555-987-6543"),
+            riskFactors: RiskFactors(fairSkin: true, lightHair: true, freckles: true)
+        )
+    ]
+    #endif
 }
 
 // MARK: - Supporting Types

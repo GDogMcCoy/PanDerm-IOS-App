@@ -1,136 +1,98 @@
-THIS SHOULD BE A LINTER ERRORimport SwiftUI
+import SwiftUI
 
 /// Main view for displaying and managing the list of patients
 /// Features search, filtering, and navigation to patient details
 struct PatientListView: View {
     @StateObject private var viewModel = PatientViewModel()
+    @State private var searchText = ""
     @State private var showingAddPatient = false
-    @State private var showingSampleDataAlert = false
+    @State private var selectedPatient: Patient?
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
+            VStack {
                 // Search Bar
-                searchBar
+                SearchBar(text: $searchText)
+                    .padding(.horizontal)
                 
                 // Patient List
-                if viewModel.filteredPatients.isEmpty {
-                    emptyStateView
-                } else {
-                    patientList
+                List {
+                    ForEach(filteredPatients) { patient in
+                        PatientRowView(patient: patient)
+                            .onTapGesture {
+                                selectedPatient = patient
+                            }
+                    }
+                    .onDelete(perform: deletePatients)
+                }
+                .listStyle(PlainListStyle())
+                .refreshable {
+                    await viewModel.refreshPatients()
                 }
             }
             .navigationTitle("Patients")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Sample Data") {
-                        showingSampleDataAlert = true
-                    }
-                    .font(.caption)
-                }
-                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddPatient = true }) {
+                    Button {
+                        showingAddPatient = true
+                    } label: {
                         Image(systemName: "plus")
                     }
                 }
             }
             .sheet(isPresented: $showingAddPatient) {
-                AddPatientView(viewModel: viewModel)
-            }
-            .alert("Load Sample Data", isPresented: $showingSampleDataAlert) {
-                Button("Load") {
-                    viewModel.loadSampleData()
+                AddPatientView { newPatient in
+                    viewModel.addPatient(newPatient)
                 }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will load sample patient data for testing purposes.")
             }
-            .onAppear {
-                viewModel.loadPatients()
+            .sheet(item: $selectedPatient) { patient in
+                PatientDetailView(patient: patient)
+            }
+        }
+        .task {
+            await viewModel.loadPatients()
+        }
+    }
+    
+    private var filteredPatients: [Patient] {
+        if searchText.isEmpty {
+            return viewModel.patients
+        } else {
+            return viewModel.patients.filter { patient in
+                patient.fullName.localizedCaseInsensitiveContains(searchText) ||
+                patient.contactInfo.email?.localizedCaseInsensitiveContains(searchText) == true
             }
         }
     }
     
-    // MARK: - Search Bar
+    private func deletePatients(offsets: IndexSet) {
+        for index in offsets {
+            let patient = filteredPatients[index]
+            viewModel.deletePatient(patient)
+        }
+    }
+}
+
+// MARK: - Search Bar
+
+struct SearchBar: View {
+    @Binding var text: String
     
-    private var searchBar: some View {
+    var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
             
-            TextField("Search patients...", text: $viewModel.searchText)
-                .textFieldStyle(PlainTextFieldStyle())
+            TextField("Search patients...", text: $text)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
             
-            if !viewModel.searchText.isEmpty {
-                Button(action: { viewModel.searchText = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+            if !text.isEmpty {
+                Button("Clear") {
+                    text = ""
                 }
+                .font(.caption)
             }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
-        .padding(.horizontal)
-        .padding(.top, 8)
-    }
-    
-    // MARK: - Patient List
-    
-    private var patientList: some View {
-        List {
-            ForEach(viewModel.filteredPatients) { patient in
-                NavigationLink(destination: PatientDetailView(patient: patient, viewModel: viewModel)) {
-                    PatientRowView(patient: patient)
-                }
-            }
-            .onDelete(perform: deletePatients)
-        }
-        .listStyle(PlainListStyle())
-    }
-    
-    // MARK: - Empty State
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "person.3")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-            
-            Text("No Patients")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Add your first patient to get started with PanDerm analysis.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-            
-            Button(action: { showingAddPatient = true }) {
-                HStack {
-                    Image(systemName: "plus")
-                    Text("Add Patient")
-                }
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
-    }
-    
-    // MARK: - Actions
-    
-    private func deletePatients(offsets: IndexSet) {
-        for index in offsets {
-            let patient = viewModel.filteredPatients[index]
-            viewModel.deletePatient(patient)
         }
     }
 }
@@ -141,104 +103,116 @@ struct PatientRowView: View {
     let patient: Patient
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Patient Avatar
-            Circle()
-                .fill(avatarColor)
-                .frame(width: 50, height: 50)
-                .overlay(
-                    Text(patient.initials)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                )
-            
-            // Patient Info
+        HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(patient.fullName)
                     .font(.headline)
                     .foregroundColor(.primary)
                 
-                Text("\(patient.age) years • \(patient.gender.displayName)")
-                    .font(.subheadline)
+                Text("Age: \(patient.age) • \(patient.gender.displayName)")
+                    .font(.caption)
                     .foregroundColor(.secondary)
                 
                 if let email = patient.contactInfo.email {
                     Text(email)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .lineLimit(1)
                 }
             }
             
             Spacer()
             
-            // Risk Indicator
             VStack(alignment: .trailing, spacing: 4) {
-                RiskBadge(riskLevel: patient.riskFactors.riskLevel)
+                RiskBadge(level: patient.riskFactors.riskLevel)
                 
-                Text("Risk Score: \(patient.riskFactors.riskScore)")
+                Text("Updated \(patient.updatedAt.formatted(.relative(presentation: .named)))")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.tertiary)
             }
         }
         .padding(.vertical, 4)
-    }
-    
-    private var avatarColor: Color {
-        switch patient.riskFactors.riskLevel {
-        case "Low": return .green
-        case "Medium": return .orange
-        case "High", "Very High": return .red
-        default: return .blue
-        }
     }
 }
 
 // MARK: - Risk Badge
 
 struct RiskBadge: View {
-    let riskLevel: String
+    let level: String
     
     var body: some View {
-        Text(riskLevel)
-            .font(.caption)
+        Text(level)
+            .font(.caption2)
             .fontWeight(.semibold)
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(riskColor.opacity(0.2))
-            .foregroundColor(riskColor)
+            .padding(.vertical, 2)
+            .background(backgroundColor)
+            .foregroundColor(textColor)
             .cornerRadius(8)
     }
     
-    private var riskColor: Color {
-        switch riskLevel {
-        case "Low": return .green
-        case "Medium": return .orange
-        case "High": return .red
-        case "Very High": return .purple
-        default: return .blue
+    private var backgroundColor: Color {
+        switch level {
+        case "Low":
+            return .green.opacity(0.2)
+        case "Medium":
+            return .orange.opacity(0.2)
+        case "High":
+            return .red.opacity(0.2)
+        case "Very High":
+            return .red.opacity(0.4)
+        default:
+            return .gray.opacity(0.2)
+        }
+    }
+    
+    private var textColor: Color {
+        switch level {
+        case "Low":
+            return .green
+        case "Medium":
+            return .orange
+        case "High", "Very High":
+            return .red
+        default:
+            return .gray
         }
     }
 }
 
-// MARK: - Add Patient View (Placeholder)
+// MARK: - Add Patient View
 
 struct AddPatientView: View {
-    @ObservedObject var viewModel: PatientViewModel
     @Environment(\.dismiss) private var dismiss
+    let onSave: (Patient) -> Void
+    
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var dateOfBirth = Date()
+    @State private var gender = Gender.preferNotToSay
+    @State private var email = ""
+    @State private var phone = ""
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("Add Patient View")
-                    .font(.title)
-                    .padding()
+            Form {
+                Section(header: Text("Personal Information")) {
+                    TextField("First Name", text: $firstName)
+                    TextField("Last Name", text: $lastName)
+                    DatePicker("Date of Birth", selection: $dateOfBirth, displayedComponents: .date)
+                    Picker("Gender", selection: $gender) {
+                        ForEach(Gender.allCases, id: \.self) { gender in
+                            Text(gender.displayName).tag(gender)
+                        }
+                    }
+                }
                 
-                Text("This view will contain a form to add new patients.")
-                    .foregroundColor(.secondary)
-                
-                Spacer()
+                Section(header: Text("Contact Information")) {
+                    TextField("Email", text: $email)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                    TextField("Phone", text: $phone)
+                        .keyboardType(.phonePad)
+                }
             }
             .navigationTitle("Add Patient")
             .navigationBarTitleDisplayMode(.inline)
@@ -251,22 +225,25 @@ struct AddPatientView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        // TODO: Implement save functionality
-                        dismiss()
+                        savePatient()
                     }
+                    .disabled(firstName.isEmpty || lastName.isEmpty)
                 }
             }
         }
     }
-}
-
-// MARK: - Patient Extensions
-
-extension Patient {
-    var initials: String {
-        let firstInitial = firstName.prefix(1).uppercased()
-        let lastInitial = lastName.prefix(1).uppercased()
-        return "\(firstInitial)\(lastInitial)"
+    
+    private func savePatient() {
+        let contactInfo = ContactInfo(email: email.isEmpty ? nil : email, phone: phone.isEmpty ? nil : phone)
+        let newPatient = Patient(
+            firstName: firstName,
+            lastName: lastName,
+            dateOfBirth: dateOfBirth,
+            gender: gender,
+            contactInfo: contactInfo
+        )
+        onSave(newPatient)
+        dismiss()
     }
 }
 

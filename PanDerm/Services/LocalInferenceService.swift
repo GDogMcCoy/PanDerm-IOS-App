@@ -283,6 +283,25 @@ class PanDermInferenceManager: ObservableObject {
         checkNetworkStatus()
     }
     
+    func initializeServices() {
+        // Initialize all services
+        Task {
+            await initializeAsync()
+        }
+    }
+    
+    private func initializeAsync() async {
+        // Wait for model to load
+        while !localInferenceService.isModelLoaded {
+            await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        }
+        
+        await MainActor.run {
+            checkModelStatus()
+            modelVersion = localInferenceService.modelVersion
+        }
+    }
+    
     func checkModelStatus() {
         if localInferenceService.isModelLoaded {
             localModelStatus = .loaded

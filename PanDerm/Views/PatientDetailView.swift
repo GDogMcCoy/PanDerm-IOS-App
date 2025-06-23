@@ -4,71 +4,65 @@ import SwiftUI
 /// Shows demographics, risk factors, medical history, and PanDerm analysis
 struct PatientDetailView: View {
     let patient: Patient
-    @ObservedObject var viewModel: PatientViewModel
-    @StateObject private var panDermService = PanDermService()
-    @State private var selectedTab = 0
-    @State private var showingEditPatient = false
-    @State private var showingAnalysisResults = false
+    @Environment(\.dismiss) private var dismiss
+    @State private var isEditing = false
+    @State private var showingAnalysisHistory = false
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Patient Header
-                patientHeader
-                
-                // Risk Assessment Card
-                riskAssessmentCard
-                
-                // Tab Navigation
-                tabNavigation
-                
-                // Tab Content
-                tabContent
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Patient Header
+                    patientHeaderView
+                    
+                    // Basic Information
+                    basicInformationSection
+                    
+                    // Risk Assessment
+                    riskAssessmentSection
+                    
+                    // Contact Information
+                    contactInformationSection
+                    
+                    // Medical History
+                    medicalHistorySection
+                    
+                    // Quick Actions
+                    quickActionsSection
+                }
+                .padding()
             }
-            .padding()
-        }
-        .navigationTitle("Patient Details")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button("Edit Patient") {
-                        showingEditPatient = true
+            .navigationTitle("Patient Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Done") {
+                        dismiss()
                     }
-                    
-                    Button("PanDerm Analysis") {
-                        Task {
-                            await viewModel.analyzePatientRisk()
-                            showingAnalysisResults = true
-                        }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Edit") {
+                        isEditing = true
                     }
-                    
-                    Button("Generate Report") {
-                        // TODO: Implement report generation
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
                 }
             }
-        }
-        .sheet(isPresented: $showingEditPatient) {
-            EditPatientView(patient: patient, viewModel: viewModel)
-        }
-        .sheet(isPresented: $showingAnalysisResults) {
-            PatientAnalysisResultsView(patient: patient, viewModel: viewModel)
-        }
-        .onAppear {
-            viewModel.selectPatient(patient)
+            .sheet(isPresented: $isEditing) {
+                EditPatientView(patient: patient)
+            }
+            .sheet(isPresented: $showingAnalysisHistory) {
+                PatientAnalysisHistoryView(patient: patient)
+            }
         }
     }
     
     // MARK: - Patient Header
     
-    private var patientHeader: some View {
+    private var patientHeaderView: some View {
         VStack(spacing: 16) {
             // Avatar
             Circle()
-                .fill(avatarColor)
+                .fill(avatarGradient)
                 .frame(width: 80, height: 80)
                 .overlay(
                     Text(patient.initials)
@@ -77,374 +71,287 @@ struct PatientDetailView: View {
                         .foregroundColor(.white)
                 )
             
-            // Patient Info
-            VStack(spacing: 8) {
+            VStack(spacing: 4) {
                 Text(patient.fullName)
                     .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("\(patient.age) years • \(patient.gender.displayName)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                if let ethnicity = patient.ethnicity {
-                    Text(ethnicity.displayName)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // Contact Info
-            if let email = patient.contactInfo.email {
-                HStack {
-                    Image(systemName: "envelope")
-                        .foregroundColor(.blue)
-                    Text(email)
-                        .font(.caption)
-                }
-            }
-            
-            if let phone = patient.contactInfo.phone {
-                HStack {
-                    Image(systemName: "phone")
-                        .foregroundColor(.green)
-                    Text(phone)
-                        .font(.caption)
-                }
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    // MARK: - Risk Assessment Card
-    
-    private var riskAssessmentCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Risk Assessment")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                RiskBadge(riskLevel: patient.riskFactors.riskLevel)
-            }
-            
-            // Risk Score
-            HStack {
-                Text("Risk Score:")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                Text("\(patient.riskFactors.riskScore)")
-                    .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundColor(riskColor)
                 
-                Spacer()
-            }
-            
-            // Risk Factors
-            if !riskFactorsList.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Risk Factors:")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 8) {
-                        ForEach(riskFactorsList, id: \.self) { factor in
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
-                                Text(factor)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Recommendations
-            let recommendations = viewModel.getRiskRecommendations(for: patient)
-            if !recommendations.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recommendations:")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    
-                    ForEach(recommendations, id: \.self) { recommendation in
-                        HStack(alignment: .top) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                                .font(.caption)
-                            Text(recommendation)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
+                Text("\(patient.age) years old • \(patient.gender.displayName)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                if let skinType = patient.skinType {
+                    Text(skinType.displayName)
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(8)
                 }
             }
         }
+        .frame(maxWidth: .infinity)
         .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    // MARK: - Tab Navigation
-    
-    private var tabNavigation: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(tabItems.enumerated()), id: \.offset) { index, item in
-                Button(action: { selectedTab = index }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 20))
-                        Text(item.title)
-                            .font(.caption)
-                    }
-                    .foregroundColor(selectedTab == index ? .blue : .secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                }
-            }
-        }
         .background(Color(.systemGray6))
-        .cornerRadius(10)
+        .cornerRadius(12)
     }
     
-    // MARK: - Tab Content
+    // MARK: - Basic Information
     
-    @ViewBuilder
-    private var tabContent: some View {
-        switch selectedTab {
-        case 0:
-            demographicsTab
-        case 1:
-            medicalHistoryTab
-        case 2:
-            skinConditionsTab
-        case 3:
-            appointmentsTab
-        default:
-            demographicsTab
-        }
-    }
-    
-    // MARK: - Demographics Tab
-    
-    private var demographicsTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Demographics")
-                .font(.headline)
-                .fontWeight(.semibold)
+    private var basicInformationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Basic Information")
             
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 InfoRow(title: "Date of Birth", value: patient.dateOfBirth.formatted(date: .long, time: .omitted))
                 InfoRow(title: "Age", value: "\(patient.age) years")
                 InfoRow(title: "Gender", value: patient.gender.displayName)
+                
                 if let ethnicity = patient.ethnicity {
                     InfoRow(title: "Ethnicity", value: ethnicity.displayName)
                 }
+                
                 if let skinType = patient.skinType {
                     InfoRow(title: "Skin Type", value: skinType.displayName)
                 }
             }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+            .shadow(radius: 1)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
     }
     
-    // MARK: - Medical History Tab
+    // MARK: - Risk Assessment
     
-    private var medicalHistoryTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Medical History")
-                .font(.headline)
-                .fontWeight(.semibold)
+    private var riskAssessmentSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Risk Assessment")
             
             VStack(spacing: 12) {
-                // Family History
-                if patient.medicalHistory.familyHistory.melanoma {
-                    InfoRow(title: "Family History", value: "Melanoma", isAlert: true)
+                HStack {
+                    Text("Overall Risk Level")
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    RiskBadge(level: patient.riskFactors.riskLevel)
                 }
                 
-                // Previous Surgeries
-                if !patient.medicalHistory.previousSurgeries.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Previous Surgeries")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        ForEach(patient.medicalHistory.previousSurgeries) { surgery in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(surgery.procedure)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                Text(surgery.date.formatted(date: .abbreviated, time: .omitted))
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.leading)
-                        }
+                HStack {
+                    Text("Risk Score")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("\(patient.riskFactors.riskScore)")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Risk Factors")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        RiskFactorChip(title: "Fair Skin", active: patient.riskFactors.fairSkin)
+                        RiskFactorChip(title: "Light Hair", active: patient.riskFactors.lightHair)
+                        RiskFactorChip(title: "Light Eyes", active: patient.riskFactors.lightEyes)
+                        RiskFactorChip(title: "Freckles", active: patient.riskFactors.freckles)
+                        RiskFactorChip(title: "Many Moles", active: patient.riskFactors.manyMoles)
+                        RiskFactorChip(title: "Atypical Moles", active: patient.riskFactors.atypicalMoles)
+                        RiskFactorChip(title: "Severe Sunburns", active: patient.riskFactors.severeSunburns)
+                        RiskFactorChip(title: "Family History", active: patient.riskFactors.familyHistory)
                     }
                 }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+            .shadow(radius: 1)
+        }
+    }
+    
+    // MARK: - Contact Information
+    
+    private var contactInformationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Contact Information")
+            
+            VStack(spacing: 8) {
+                if let email = patient.contactInfo.email {
+                    InfoRow(title: "Email", value: email)
+                }
                 
-                // Current Medications
-                if !patient.medicalHistory.medications.filter({ $0.isActive }).isEmpty {
+                if let phone = patient.contactInfo.phone {
+                    InfoRow(title: "Phone", value: phone)
+                }
+                
+                if patient.contactInfo.email == nil && patient.contactInfo.phone == nil {
+                    Text("No contact information available")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+            .shadow(radius: 1)
+        }
+    }
+    
+    // MARK: - Medical History
+    
+    private var medicalHistorySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Medical History")
+            
+            VStack(spacing: 12) {
+                if !patient.medicalHistory.medications.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Current Medications")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
-                        ForEach(patient.medicalHistory.medications.filter { $0.isActive }) { medication in
-                            VStack(alignment: .leading, spacing: 4) {
+                        ForEach(patient.medicalHistory.medications.filter { $0.isActive }.prefix(3), id: \.id) { medication in
+                            HStack {
                                 Text(medication.name)
                                     .font(.caption)
-                                    .fontWeight(.medium)
-                                Text("\(medication.dosage) • \(medication.frequency)")
-                                    .font(.caption2)
+                                
+                                Spacer()
+                                
+                                Text(medication.dosage)
+                                    .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-                            .padding(.leading)
                         }
                     }
                 }
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    // MARK: - Skin Conditions Tab
-    
-    private var skinConditionsTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Skin Conditions")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            if patient.medicalHistory.previousSkinConditions.isEmpty {
-                Text("No previous skin conditions recorded")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(patient.medicalHistory.previousSkinConditions) { condition in
+                
+                if !patient.medicalHistory.allergies.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(condition.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            
-                            Spacer()
-                            
-                            Text(condition.category.displayName)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.2))
-                                .foregroundColor(.blue)
-                                .cornerRadius(8)
-                        }
+                        Text("Allergies")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                         
-                        Text(condition.notes)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        ForEach(patient.medicalHistory.allergies.prefix(3), id: \.id) { allergy in
+                            HStack {
+                                Text(allergy.allergen)
+                                    .font(.caption)
+                                
+                                Spacer()
+                                
+                                Text(allergy.severity.rawValue.capitalized)
+                                    .font(.caption)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(severityColor(allergy.severity))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(4)
+                            }
+                        }
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+                }
+                
+                if patient.medicalHistory.medications.isEmpty && patient.medicalHistory.allergies.isEmpty {
+                    Text("No medical history recorded")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+            .shadow(radius: 1)
+        }
+    }
+    
+    // MARK: - Quick Actions
+    
+    private var quickActionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Quick Actions")
+            
+            VStack(spacing: 12) {
+                ActionButton(
+                    title: "Start New Analysis",
+                    subtitle: "Capture and analyze skin images",
+                    icon: "camera.fill",
+                    color: .blue
+                ) {
+                    // Navigate to analysis view
+                }
+                
+                ActionButton(
+                    title: "View Analysis History",
+                    subtitle: "Review past analyses for this patient",
+                    icon: "clock.fill",
+                    color: .green
+                ) {
+                    showingAnalysisHistory = true
+                }
+                
+                ActionButton(
+                    title: "Schedule Appointment",
+                    subtitle: "Book follow-up consultation",
+                    icon: "calendar.badge.plus",
+                    color: .orange
+                ) {
+                    // Navigate to appointment scheduling
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
     }
     
-    // MARK: - Appointments Tab
+    // MARK: - Helper Views
     
-    private var appointmentsTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Appointments")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            Text("Appointment history will be displayed here")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+    private var avatarGradient: LinearGradient {
+        let colors = [Color.blue, Color.purple]
+        return LinearGradient(gradient: Gradient(colors: colors), startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    
+    private func severityColor(_ severity: MedicalHistory.AllergySeverity) -> Color {
+        switch severity {
+        case .mild:
+            return .green
+        case .moderate:
+            return .orange
+        case .severe:
+            return .red
+        case .lifeThreatening:
+            return .purple
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 2)
-    }
-    
-    // MARK: - Computed Properties
-    
-    private var avatarColor: Color {
-        switch patient.riskFactors.riskLevel {
-        case "Low": return .green
-        case "Medium": return .orange
-        case "High", "Very High": return .red
-        default: return .blue
-        }
-    }
-    
-    private var riskColor: Color {
-        switch patient.riskFactors.riskLevel {
-        case "Low": return .green
-        case "Medium": return .orange
-        case "High": return .red
-        case "Very High": return .purple
-        default: return .blue
-        }
-    }
-    
-    private var riskFactorsList: [String] {
-        var factors: [String] = []
-        
-        if patient.riskFactors.fairSkin { factors.append("Fair Skin") }
-        if patient.riskFactors.lightHair { factors.append("Light Hair") }
-        if patient.riskFactors.lightEyes { factors.append("Light Eyes") }
-        if patient.riskFactors.freckles { factors.append("Freckles") }
-        if patient.riskFactors.manyMoles { factors.append("Many Moles") }
-        if patient.riskFactors.atypicalMoles { factors.append("Atypical Moles") }
-        if patient.riskFactors.severeSunburns { factors.append("Severe Sunburns") }
-        if patient.riskFactors.familyHistory { factors.append("Family History") }
-        if patient.riskFactors.personalHistory { factors.append("Personal History") }
-        if patient.riskFactors.immunosuppression { factors.append("Immunosuppression") }
-        if patient.riskFactors.xerodermaPigmentosum { factors.append("Xeroderma Pigmentosum") }
-        
-        return factors
-    }
-    
-    private var tabItems: [(title: String, icon: String)] {
-        [
-            ("Demographics", "person.circle"),
-            ("Medical History", "heart.circle"),
-            ("Skin Conditions", "camera.circle"),
-            ("Appointments", "calendar.circle")
-        ]
     }
 }
 
 // MARK: - Supporting Views
 
+struct SectionHeader: View {
+    let title: String
+    
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .fontWeight(.semibold)
+            .foregroundColor(.primary)
+    }
+}
+
 struct InfoRow: View {
     let title: String
     let value: String
-    var isAlert: Bool = false
     
     var body: some View {
         HStack {
@@ -457,29 +364,136 @@ struct InfoRow: View {
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .foregroundColor(isAlert ? .red : .primary)
         }
     }
 }
 
-// MARK: - Placeholder Views
+struct RiskFactorChip: View {
+    let title: String
+    let active: Bool
+    
+    var body: some View {
+        HStack {
+            Image(systemName: active ? "checkmark.circle.fill" : "circle")
+                .foregroundColor(active ? .green : .gray)
+                .font(.caption)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(active ? .primary : .secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(active ? Color.green.opacity(0.1) : Color.gray.opacity(0.1))
+        .cornerRadius(8)
+    }
+}
+
+struct ActionButton: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(color)
+                    .frame(width: 30, height: 30)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+            .shadow(radius: 1)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Edit Patient View
 
 struct EditPatientView: View {
     let patient: Patient
-    @ObservedObject var viewModel: PatientViewModel
     @Environment(\.dismiss) private var dismiss
+    
+    // Edit state
+    @State private var firstName: String
+    @State private var lastName: String
+    @State private var dateOfBirth: Date
+    @State private var gender: Gender
+    @State private var ethnicity: Ethnicity?
+    @State private var skinType: FitzpatrickSkinType?
+    @State private var email: String
+    @State private var phone: String
+    
+    init(patient: Patient) {
+        self.patient = patient
+        self._firstName = State(initialValue: patient.firstName)
+        self._lastName = State(initialValue: patient.lastName)
+        self._dateOfBirth = State(initialValue: patient.dateOfBirth)
+        self._gender = State(initialValue: patient.gender)
+        self._ethnicity = State(initialValue: patient.ethnicity)
+        self._skinType = State(initialValue: patient.skinType)
+        self._email = State(initialValue: patient.contactInfo.email ?? "")
+        self._phone = State(initialValue: patient.contactInfo.phone ?? "")
+    }
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("Edit Patient View")
-                    .font(.title)
-                    .padding()
+            Form {
+                Section(header: Text("Personal Information")) {
+                    TextField("First Name", text: $firstName)
+                    TextField("Last Name", text: $lastName)
+                    DatePicker("Date of Birth", selection: $dateOfBirth, displayedComponents: .date)
+                    
+                    Picker("Gender", selection: $gender) {
+                        ForEach(Gender.allCases, id: \.self) { gender in
+                            Text(gender.displayName).tag(gender)
+                        }
+                    }
+                    
+                    Picker("Ethnicity", selection: $ethnicity) {
+                        Text("Not specified").tag(nil as Ethnicity?)
+                        ForEach(Ethnicity.allCases, id: \.self) { ethnicity in
+                            Text(ethnicity.displayName).tag(ethnicity as Ethnicity?)
+                        }
+                    }
+                    
+                    Picker("Skin Type", selection: $skinType) {
+                        Text("Not specified").tag(nil as FitzpatrickSkinType?)
+                        ForEach(FitzpatrickSkinType.allCases, id: \.self) { skinType in
+                            Text(skinType.displayName).tag(skinType as FitzpatrickSkinType?)
+                        }
+                    }
+                }
                 
-                Text("This view will contain a form to edit patient information.")
-                    .foregroundColor(.secondary)
-                
-                Spacer()
+                Section(header: Text("Contact Information")) {
+                    TextField("Email", text: $email)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                    
+                    TextField("Phone", text: $phone)
+                        .keyboardType(.phonePad)
+                }
             }
             .navigationTitle("Edit Patient")
             .navigationBarTitleDisplayMode(.inline)
@@ -492,33 +506,51 @@ struct EditPatientView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        // TODO: Implement save functionality
-                        dismiss()
+                        saveChanges()
                     }
+                    .disabled(firstName.isEmpty || lastName.isEmpty)
                 }
             }
         }
     }
+    
+    private func saveChanges() {
+        // TODO: Update patient in view model
+        dismiss()
+    }
 }
 
-struct PatientAnalysisResultsView: View {
+// MARK: - Patient Analysis History View
+
+struct PatientAnalysisHistoryView: View {
     let patient: Patient
-    @ObservedObject var viewModel: PatientViewModel
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
-            VStack {
-                Text("PanDerm Analysis Results")
-                    .font(.title)
-                    .padding()
-                
-                Text("This view will display PanDerm AI analysis results.")
-                    .foregroundColor(.secondary)
-                
-                Spacer()
+            List {
+                Section(header: Text("Recent Analyses")) {
+                    ForEach(0..<5) { index in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("Skin Analysis #\(index + 1)")
+                                    .font(.headline)
+                                
+                                Text("Melanocytic nevus - 87% confidence")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Text("2 days ago")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
             }
-            .navigationTitle("Analysis Results")
+            .navigationTitle("Analysis History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -531,21 +563,16 @@ struct PatientAnalysisResultsView: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Patient Extensions
 
-struct PatientDetailView_Previews: PreviewProvider {
-    static var previews: some View {
-        NavigationView {
-            PatientDetailView(
-                patient: Patient(
-                    firstName: "John",
-                    lastName: "Smith",
-                    dateOfBirth: Calendar.current.date(byAdding: .year, value: -45, to: Date()) ?? Date(),
-                    gender: .male,
-                    contactInfo: ContactInfo(email: "john@example.com")
-                ),
-                viewModel: PatientViewModel()
-            )
-        }
+extension Patient {
+    var initials: String {
+        let firstInitial = firstName.prefix(1).uppercased()
+        let lastInitial = lastName.prefix(1).uppercased()
+        return "\(firstInitial)\(lastInitial)"
     }
+}
+
+#Preview {
+    PatientDetailView(patient: Patient.sampleData[0])
 } 
